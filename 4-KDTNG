@@ -1,19 +1,31 @@
-local SoloLagDetector = {}
-SoloLagDetector.IsMonitoring = false
-SoloLagDetector.Metrics = {
-    serverResponseTimes = {},
+-- 物理延迟与安全监测
+local PhysicsSecurityMonitor = {}
+PhysicsSecurityMonitor.IsMonitoring = false
+PhysicsSecurityMonitor.Metrics = {
     physicsLatency = {},
-    networkStability = {}
+    frameTimes = {},
+    performanceStats = {}
 }
 
+-- 安全监测阈值
+PhysicsSecurityMonitor.SecurityThresholds = {
+    highLatency = 100,    -- 超过100ms视为异常
+    highVariance = 50,    -- 波动超过50ms视为异常
+    fpsDrop = 20,         -- FPS下降超过20帧视为异常
+}
+
+PhysicsSecurityMonitor.AnomalyCount = 0
+PhysicsSecurityMonitor.NormalBaseline = nil
+PhysicsSecurityMonitor.SecurityAlerts = {}
+
 -- 创建UI界面
-function SoloLagDetector.createUI()
+function PhysicsSecurityMonitor.createUI()
     local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "SoloLagDetectorGUI"
+    screenGui.Name = "PhysicsSecurityMonitorGUI"
     screenGui.ResetOnSpawn = false
 
     local mainFrame = Instance.new("Frame")
-    mainFrame.Size = UDim2.new(0, 400, 0, 500)
+    mainFrame.Size = UDim2.new(0, 400, 0, 400)
     mainFrame.Position = UDim2.new(0, 10, 0, 10)
     mainFrame.BackgroundColor3 = Color3.new(0.1, 0.1, 0.2)
     mainFrame.BorderSizePixel = 0
@@ -29,7 +41,7 @@ function SoloLagDetector.createUI()
     local titleLabel = Instance.new("TextLabel")
     titleLabel.Size = UDim2.new(1, 0, 1, 0)
     titleLabel.BackgroundTransparency = 1
-    titleLabel.Text = "服务器压力测试器"
+    titleLabel.Text = "物理延迟与安全监测器"
     titleLabel.TextColor3 = Color3.new(1, 1, 1)
     titleLabel.TextSize = 14
     titleLabel.Font = Enum.Font.GothamBold
@@ -46,7 +58,7 @@ function SoloLagDetector.createUI()
     startButton.Size = UDim2.new(0.5, -5, 0, 35)
     startButton.Position = UDim2.new(0, 0, 0, 0)
     startButton.BackgroundColor3 = Color3.new(0.2, 0.6, 0.2)
-    startButton.Text = "开始基准测试"
+    startButton.Text = "开始监测"
     startButton.TextColor3 = Color3.new(1, 1, 1)
     startButton.Parent = controlFrame
 
@@ -54,17 +66,17 @@ function SoloLagDetector.createUI()
     stopButton.Size = UDim2.new(0.5, -5, 0, 35)
     stopButton.Position = UDim2.new(0.5, 5, 0, 0)
     stopButton.BackgroundColor3 = Color3.new(0.6, 0.2, 0.2)
-    stopButton.Text = "停止测试"
+    stopButton.Text = "停止监测"
     stopButton.TextColor3 = Color3.new(1, 1, 1)
     stopButton.Parent = controlFrame
 
-    local attackButton = Instance.new("TextButton")
-    attackButton.Size = UDim2.new(1, 0, 0, 35)
-    attackButton.Position = UDim2.new(0, 0, 0, 40)
-    attackButton.BackgroundColor3 = Color3.new(0.8, 0.4, 0.1)
-    attackButton.Text = "开始压力测试"
-    attackButton.TextColor3 = Color3.new(1, 1, 1)
-    attackButton.Parent = controlFrame
+    local securityButton = Instance.new("TextButton")
+    securityButton.Size = UDim2.new(1, 0, 0, 35)
+    securityButton.Position = UDim2.new(0, 0, 0, 40)
+    securityButton.BackgroundColor3 = Color3.new(0.3, 0.3, 0.6)
+    securityButton.Text = "安全监测: 关闭"
+    securityButton.TextColor3 = Color3.new(1, 1, 1)
+    securityButton.Parent = controlFrame
 
     -- 数据显示区域
     local displayFrame = Instance.new("Frame")
@@ -83,9 +95,9 @@ function SoloLagDetector.createUI()
     local contentLabel = Instance.new("TextLabel")
     contentLabel.Size = UDim2.new(1, 0, 0, 0)
     contentLabel.BackgroundTransparency = 1
-    contentLabel.Text = "点击开始基准测试..."
+    contentLabel.Text = "点击开始监测物理延迟..."
     contentLabel.TextColor3 = Color3.new(1, 1, 1)
-    contentLabel.TextSize = 12
+    contentLabel.TextSize = 11
     contentLabel.TextWrapped = true
     contentLabel.TextXAlignment = Enum.TextXAlignment.Left
     contentLabel.TextYAlignment = Enum.TextYAlignment.Top
@@ -97,12 +109,12 @@ function SoloLagDetector.createUI()
     screenGui.Parent = game:GetService("CoreGui")
     mainFrame.Parent = screenGui
 
-    SoloLagDetector.UI = {
+    PhysicsSecurityMonitor.UI = {
         ScreenGui = screenGui,
         MainFrame = mainFrame,
         StartButton = startButton,
         StopButton = stopButton,
-        AttackButton = attackButton,
+        SecurityButton = securityButton,
         ContentLabel = contentLabel,
         ScrollFrame = scrollFrame
     }
@@ -110,242 +122,57 @@ function SoloLagDetector.createUI()
     return mainFrame
 end
 
--- 更新显示内容（优化滚动）
-function SoloLagDetector.updateDisplay(text)
-    if SoloLagDetector.UI and SoloLagDetector.UI.ContentLabel then
-        SoloLagDetector.UI.ContentLabel.Text = text
-        SoloLagDetector.UI.ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, SoloLagDetector.UI.ContentLabel.TextBounds.Y)
-        SoloLagDetector.UI.ScrollFrame.CanvasPosition = Vector2.new(0, SoloLagDetector.UI.ContentLabel.TextBounds.Y)
+-- 更新显示内容
+function PhysicsSecurityMonitor.updateDisplay(text)
+    if PhysicsSecurityMonitor.UI and PhysicsSecurityMonitor.UI.ContentLabel then
+        PhysicsSecurityMonitor.UI.ContentLabel.Text = text
+        PhysicsSecurityMonitor.UI.ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, PhysicsSecurityMonitor.UI.ContentLabel.TextBounds.Y)
+        PhysicsSecurityMonitor.UI.ScrollFrame.CanvasPosition = Vector2.new(0, PhysicsSecurityMonitor.UI.ContentLabel.TextBounds.Y)
     end
 end
 
--- 更准确的服务器响应时间测量
-function SoloLagDetector.measureServerResponse()
-    local startTime = tick()
-    
-    -- 方法1：尝试使用游戏内现有的Remote（更真实）
-    local testRemote = SoloLagDetector.findSafeTestRemote()
-    if testRemote then
-        local success, result = pcall(function()
-            if testRemote:IsA("RemoteFunction") then
-                return testRemote:InvokeServer("lag_test_" .. tick())
-            else
-                testRemote:FireServer("lag_test_" .. tick())
-                return true
-            end
-        end)
-        
-        local responseTime = (tick() - startTime) * 1000
-        return responseTime, success
-    end
-    
-    -- 方法2：备用方案 - 使用网络统计
-    local stats = game:GetService("Stats")
-    local network = stats and stats:FindFirstChild("Network")
-    if network then
-        local pingStats = network:FindFirstChild("Ping")
-        if pingStats then
-            return pingStats.Value, true
-        end
-    end
-    
-    return nil, false
-end
-
--- 智能寻找安全的测试Remote
-function SoloLagDetector.findSafeTestRemote()
-    -- 优先寻找可能无害的Remote
-    local safePatterns = {"update", "ping", "heartbeat", "client", "player", "gui", "ui", "chat"}
-    local dangerousPatterns = {"admin", "ban", "kick", "money", "data", "save", "purchase"}
-    
-    local services = {
-        game:GetService("ReplicatedStorage"),
-        game:GetService("Players")
-    }
-    
-    for _, service in ipairs(services) do
-        for _, item in ipairs(service:GetDescendants()) do
-            if item:IsA("RemoteEvent") or item:IsA("RemoteFunction") then
-                local name = item.Name:lower()
-                
-                -- 检查是否安全
-                local isSafe = false
-                for _, pattern in ipairs(safePatterns) do
-                    if name:find(pattern) then
-                        isSafe = true
-                        break
-                    end
-                end
-                
-                -- 排除危险Remote
-                for _, pattern in ipairs(dangerousPatterns) do
-                    if name:find(pattern) then
-                        isSafe = false
-                        break
-                    end
-                end
-                
-                if isSafe then
-                    -- 测试一次确认可用
-                    local testSuccess = pcall(function()
-                        if item:IsA("RemoteEvent") then
-                            item:FireServer("test_connection")
-                        else
-                            item:InvokeServer("test_connection")
-                        end
-                    end)
-                    
-                    if testSuccess then
-                        return item
-                    end
-                end
-            end
-        end
-    end
-    
-    return nil
-end
-
--- 改进的物理延迟测量
-function SoloLagDetector.measurePhysicsLatency()
+-- 精确测量物理延迟
+function PhysicsSecurityMonitor.measurePhysicsLatency()
     local runService = game:GetService("RunService")
     local startTime = tick()
     
-    -- 等待一帧来测量帧间隔
     runService.Heartbeat:Wait()
     local frameTime = (tick() - startTime) * 1000
     
     return frameTime
 end
 
--- 网络稳定性测量
-function SoloLagDetector.measureNetworkStability()
-    local testResults = {}
-    
-    for i = 1, 3 do
-        local responseTime = SoloLagDetector.measureServerResponse()
-        if responseTime then
-            table.insert(testResults, responseTime)
-        end
-        wait(0.05)
+-- 测量FPS
+function PhysicsSecurityMonitor.measureFPS()
+    local frameTime = PhysicsSecurityMonitor.measurePhysicsLatency()
+    if frameTime > 0 then
+        return math.floor(1000 / frameTime)
     end
-    
-    if #testResults == 0 then return 0, {} end
-    
-    -- 计算稳定性（基于方差）
-    local average = 0
-    for _, time in ipairs(testResults) do
-        average = average + time
-    end
-    average = average / #testResults
-    
-    local variance = 0
-    for _, time in ipairs(testResults) do
-        variance = variance + (time - average) ^ 2
-    end
-    variance = variance / #testResults
-    
-    local stabilityScore = math.max(0, 100 - variance * 0.5)
-    
-    return stabilityScore, testResults
+    return 0
 end
 
--- 开始基准测试
-function SoloLagDetector.startBaselineTest()
-    if SoloLagDetector.IsMonitoring then return end
-
-    SoloLagDetector.IsMonitoring = true
-    SoloLagDetector.BaselineMetrics = {}
-    SoloLagDetector.Metrics = {
-        serverResponseTimes = {},
-        physicsLatency = {},
-        networkStability = {}
-    }
-
-    SoloLagDetector.UI.StartButton.BackgroundColor3 = Color3.new(0.6, 0.6, 0.2)
-    SoloLagDetector.UI.StartButton.Text = "测试中..."
-
-    SoloLagDetector.updateDisplay("开始基准测试...\n\n正在测量服务器性能基准...")
-
-    -- 主测试循环
-    SoloLagDetector.TestConnection = game:GetService("RunService").Heartbeat:Connect(function()
-        if not SoloLagDetector.IsMonitoring then return end
-
-        -- 测量各项指标
-        local responseTime, responseSuccess = SoloLagDetector.measureServerResponse()
-        local physicsTime = SoloLagDetector.measurePhysicsLatency()
-        local stability, stabilityResults = SoloLagDetector.measureNetworkStability()
-
-        -- 记录数据
-        if responseTime and responseSuccess then
-            table.insert(SoloLagDetector.Metrics.serverResponseTimes, responseTime)
-            if #SoloLagDetector.Metrics.serverResponseTimes > 100 then
-                table.remove(SoloLagDetector.Metrics.serverResponseTimes, 1)
-            end
-        end
-
-        table.insert(SoloLagDetector.Metrics.physicsLatency, physicsTime)
-        if #SoloLagDetector.Metrics.physicsLatency > 100 then
-            table.remove(SoloLagDetector.Metrics.physicsLatency, 1)
-        end
-
-        table.insert(SoloLagDetector.Metrics.networkStability, stability)
-        if #SoloLagDetector.Metrics.networkStability > 100 then
-            table.remove(SoloLagDetector.Metrics.networkStability, 1)
-        end
-
-        -- 计算统计信息
-        local avgResponse = SoloLagDetector.calculateAverage(SoloLagDetector.Metrics.serverResponseTimes)
-        local avgPhysics = SoloLagDetector.calculateAverage(SoloLagDetector.Metrics.physicsLatency)
-        local avgStability = SoloLagDetector.calculateAverage(SoloLagDetector.Metrics.networkStability)
-        
-        local minResponse = SoloLagDetector.calculateMin(SoloLagDetector.Metrics.serverResponseTimes)
-        local maxResponse = SoloLagDetector.calculateMax(SoloLagDetector.Metrics.serverResponseTimes)
-
-        -- 更新显示
-        local displayText = string.format(
-            "基准测试进行中...\n\n" ..
-            "实时指标:\n" ..
-            "服务器响应: %.1f ms (最小: %.1f, 最大: %.1f)\n" ..
-            "物理延迟: %.1f ms\n" ..
-            "网络稳定性: %.0f/100\n\n" ..
-            "延迟评估:\n",
-            avgResponse or 0, minResponse or 0, maxResponse or 0, 
-            avgPhysics or 0, avgStability or 0
-        )
-        
-        -- 延迟评级
-        if avgResponse and avgResponse < 50 then
-            displayText = displayText .. "优秀 (<50ms) - 服务器响应极快\n"
-        elseif avgResponse and avgResponse < 100 then
-            displayText = displayText .. "良好 (50-100ms) - 可接受的延迟\n"
-        elseif avgResponse and avgResponse < 200 then
-            displayText = displayText .. "一般 (100-200ms) - 轻微延迟\n"
-        else
-            displayText = displayText .. "卡顿 (>200ms) - 明显延迟\n"
-        end
-        
-        displayText = displayText .. string.format("\n已进行 %d 次测量", #SoloLagDetector.Metrics.serverResponseTimes)
-
-        SoloLagDetector.updateDisplay(displayText)
-
-        -- 保存基准数据
-        if #SoloLagDetector.Metrics.serverResponseTimes == 20 and not SoloLagDetector.BaselineMetrics.established then
-            SoloLagDetector.BaselineMetrics = {
-                serverResponse = avgResponse,
-                physicsLatency = avgPhysics,
-                networkStability = avgStability,
-                minResponse = minResponse,
-                maxResponse = maxResponse,
-                established = true
-            }
-            SoloLagDetector.updateDisplay(displayText .. "\n\n基准数据已保存! 可以开始压力测试")
-        end
-    end)
+-- 获取性能统计
+function PhysicsSecurityMonitor.getPerformanceStats()
+    local stats = game:GetService("Stats")
+    local performanceStats = {}
+    
+    local memoryStats = stats:FindFirstChild("Memory")
+    if memoryStats then
+        performanceStats.memory = memoryStats:FindFirstChild("UsedMemory") and memoryStats.UsedMemory.Value or 0
+    end
+    
+    local networkStats = stats:FindFirstChild("Network")
+    if networkStats then
+        performanceStats.ping = networkStats:FindFirstChild("Ping") and networkStats.Ping.Value or 0
+        performanceStats.dataSent = networkStats:FindFirstChild("DataSent") and networkStats.DataSent.Value or 0
+        performanceStats.dataReceived = networkStats:FindFirstChild("DataReceived") and networkStats.DataReceived.Value or 0
+    end
+    
+    return performanceStats
 end
 
--- 计算最小值
-function SoloLagDetector.calculateMin(values)
+-- 计算统计函数
+function PhysicsSecurityMonitor.calculateMin(values)
     if #values == 0 then return 0 end
     local min = values[1]
     for i = 2, #values do
@@ -356,8 +183,7 @@ function SoloLagDetector.calculateMin(values)
     return min
 end
 
--- 计算最大值
-function SoloLagDetector.calculateMax(values)
+function PhysicsSecurityMonitor.calculateMax(values)
     if #values == 0 then return 0 end
     local max = values[1]
     for i = 2, #values do
@@ -368,8 +194,7 @@ function SoloLagDetector.calculateMax(values)
     return max
 end
 
--- 计算平均值
-function SoloLagDetector.calculateAverage(values)
+function PhysicsSecurityMonitor.calculateAverage(values)
     if #values == 0 then return 0 end
     local sum = 0
     for _, value in ipairs(values) do
@@ -378,232 +203,285 @@ function SoloLagDetector.calculateAverage(values)
     return sum / #values
 end
 
--- 开始压力测试（攻击测试）
-function SoloLagDetector.startAttackComparison()
-    if not SoloLagDetector.BaselineMetrics or not SoloLagDetector.BaselineMetrics.established then
-        SoloLagDetector.updateDisplay("请先完成基准测试!")
-        return
+-- 安全监测功能
+function PhysicsSecurityMonitor.detectAnomalies()
+    if not PhysicsSecurityMonitor.IsMonitoring then return end
+    
+    local currentMetrics = {
+        latency = PhysicsSecurityMonitor.calculateAverage(PhysicsSecurityMonitor.Metrics.physicsLatency),
+        fps = PhysicsSecurityMonitor.calculateAverage(PhysicsSecurityMonitor.Metrics.frameTimes),
+        variance = PhysicsSecurityMonitor.calculateMax(PhysicsSecurityMonitor.Metrics.physicsLatency) - 
+                  PhysicsSecurityMonitor.calculateMin(PhysicsSecurityMonitor.Metrics.physicsLatency)
+    }
+    
+    -- 建立正常基线
+    if not PhysicsSecurityMonitor.NormalBaseline and #PhysicsSecurityMonitor.Metrics.physicsLatency > 30 then
+        PhysicsSecurityMonitor.NormalBaseline = currentMetrics
+        PhysicsSecurityMonitor.updateDisplay("安全基线已建立\n开始异常监测...")
     end
-
-    SoloLagDetector.AttackMode = true
-    SoloLagDetector.UI.AttackButton.BackgroundColor3 = Color3.new(0.8, 0.2, 0.1)
-    SoloLagDetector.UI.AttackButton.Text = "压力测试中..."
-
-    SoloLagDetector.updateDisplay("开始服务器压力测试...\n\n" ..
-        string.format("基准数据:\n• 响应: %.1fms (最小: %.1f, 最大: %.1f)\n• 物理: %.1fms\n• 稳定: %.0f/100\n\n攻击进行中...",
-        SoloLagDetector.BaselineMetrics.serverResponse,
-        SoloLagDetector.BaselineMetrics.minResponse,
-        SoloLagDetector.BaselineMetrics.maxResponse,
-        SoloLagDetector.BaselineMetrics.physicsLatency,
-        SoloLagDetector.BaselineMetrics.networkStability))
-
-    -- 智能攻击：只针对安全的Remote进行有限度的测试
-    SoloLagDetector.startSmartAttack()
+    
+    -- 检测异常
+    if PhysicsSecurityMonitor.NormalBaseline then
+        local anomalies = {}
+        
+        -- 检测高延迟
+        if currentMetrics.latency > PhysicsSecurityMonitor.SecurityThresholds.highLatency then
+            table.insert(anomalies, "高物理延迟")
+        end
+        
+        -- 检测异常波动
+        if currentMetrics.variance > PhysicsSecurityMonitor.SecurityThresholds.highVariance then
+            table.insert(anomalies, "异常波动")
+        end
+        
+        -- 检测FPS骤降
+        if PhysicsSecurityMonitor.NormalBaseline.fps - currentMetrics.fps > PhysicsSecurityMonitor.SecurityThresholds.fpsDrop then
+            table.insert(anomalies, "FPS骤降")
+        end
+        
+        -- 处理检测结果
+        if #anomalies > 0 then
+            PhysicsSecurityMonitor.AnomalyCount = PhysicsSecurityMonitor.AnomalyCount + 1
+            
+            if PhysicsSecurityMonitor.AnomalyCount >= 3 then
+                PhysicsSecurityMonitor.triggerSecurityAlert(table.concat(anomalies, ", "), currentMetrics)
+            end
+        else
+            PhysicsSecurityMonitor.AnomalyCount = math.max(0, PhysicsSecurityMonitor.AnomalyCount - 1)
+        end
+    end
 end
 
--- 智能攻击模式
-function SoloLagDetector.startSmartAttack()
-    -- 收集安全的Remote对象
-    local attackRemotes = {}
-    local safePatterns = {"update", "ping", "heartbeat", "client", "player", "gui", "ui"}
+-- 安全警报
+function PhysicsSecurityMonitor.triggerSecurityAlert(reason, metrics)
+    local alertTime = os.date("%H:%M:%S")
+    local alertId = tick()
     
-    local services = {
-        game:GetService("ReplicatedStorage"),
-        game:GetService("Players")
+    -- 记录警报
+    table.insert(PhysicsSecurityMonitor.SecurityAlerts, {
+        time = alertTime,
+        reason = reason,
+        metrics = metrics,
+        id = alertId
+    })
+    
+    -- 在界面上显示警告
+    local alertText = string.format(
+        "安全警报\n\n" ..
+        "检测到可能的服务器异常:\n%s\n\n" ..
+        "当前指标:\n" ..
+        "延迟: %.1fms | FPS: %d\n" ..
+        "波动: %.1fms\n\n" ..
+        "时间: %s\n" ..
+        "警报ID: %.0f\n\n" ..
+        "建议: 如持续出现请报告管理员",
+        reason, metrics.latency, metrics.fps, metrics.variance, alertTime, alertId
+    )
+    
+    -- 改变界面颜色以示警告
+    PhysicsSecurityMonitor.UI.MainFrame.BackgroundColor3 = Color3.new(0.3, 0.1, 0.1)
+    
+    -- 恢复颜色（8秒后）
+    delay(8, function()
+        if PhysicsSecurityMonitor.UI and PhysicsSecurityMonitor.UI.MainFrame then
+            PhysicsSecurityMonitor.UI.MainFrame.BackgroundColor3 = Color3.new(0.1, 0.1, 0.2)
+        end
+    end)
+    
+    PhysicsSecurityMonitor.updateDisplay(alertText)
+    
+    -- 输出到控制台
+    warn(string.format("[安全监测] 警报 #%d: %s at %s", #PhysicsSecurityMonitor.SecurityAlerts, reason, alertTime))
+end
+
+-- 切换安全监测
+function PhysicsSecurityMonitor.toggleSecurityMonitoring()
+    PhysicsSecurityMonitor.SecurityMonitoring = not PhysicsSecurityMonitor.SecurityMonitoring
+    
+    if PhysicsSecurityMonitor.SecurityMonitoring then
+        PhysicsSecurityMonitor.UI.SecurityButton.BackgroundColor3 = Color3.new(0.2, 0.6, 0.2)
+        PhysicsSecurityMonitor.UI.SecurityButton.Text = "安全监测: 开启"
+        PhysicsSecurityMonitor.updateDisplay("安全监测已启用\n将检测服务器异常行为...")
+    else
+        PhysicsSecurityMonitor.UI.SecurityButton.BackgroundColor3 = Color3.new(0.3, 0.3, 0.6)
+        PhysicsSecurityMonitor.UI.SecurityButton.Text = "安全监测: 关闭"
+        PhysicsSecurityMonitor.updateDisplay("安全监测已关闭")
+    end
+end
+
+-- 显示安全日志
+function PhysicsSecurityMonitor.showSecurityLog()
+    if #PhysicsSecurityMonitor.SecurityAlerts == 0 then
+        return "暂无安全警报"
+    end
+    
+    local logText = "安全警报日志:\n\n"
+    for i, alert in ipairs(PhysicsSecurityMonitor.SecurityAlerts) do
+        logText = logText .. string.format("%d. [%s] %s\n", i, alert.time, alert.reason)
+    end
+    
+    return logText
+end
+
+-- 开始监测
+function PhysicsSecurityMonitor.startMonitoring()
+    if PhysicsSecurityMonitor.IsMonitoring then return end
+
+    PhysicsSecurityMonitor.IsMonitoring = true
+    PhysicsSecurityMonitor.Metrics = {
+        physicsLatency = {},
+        frameTimes = {},
+        performanceStats = {}
     }
 
-    for _, service in ipairs(services) do
-        for _, item in ipairs(service:GetDescendants()) do
-            if (item:IsA("RemoteEvent") or item:IsA("RemoteFunction")) and not item:FindFirstChild("SecurityCritical") then
-                local name = item.Name:lower()
-                for _, pattern in ipairs(safePatterns) do
-                    if name:find(pattern) then
-                        table.insert(attackRemotes, item)
-                        break
-                    end
-                end
-            end
-        end
-    end
+    PhysicsSecurityMonitor.UI.StartButton.BackgroundColor3 = Color3.new(0.6, 0.6, 0.2)
+    PhysicsSecurityMonitor.UI.StartButton.Text = "监测中..."
 
-    if #attackRemotes == 0 then
-        SoloLagDetector.updateDisplay("未找到安全的Remote进行测试\n使用模拟网络压力...")
-        -- 备用方案：模拟网络活动
-        SoloLagDetector.startSimulatedAttack()
-        return
-    end
+    PhysicsSecurityMonitor.updateDisplay("开始监测物理延迟...\n\n正在收集基准数据...")
 
-    SoloLagDetector.updateDisplay("找到 " .. #attackRemotes .. " 个安全Remote进行测试\n开始智能压力测试...")
+    -- 主监测循环
+    PhysicsSecurityMonitor.MonitorConnection = game:GetService("RunService").Heartbeat:Connect(function()
+        if not PhysicsSecurityMonitor.IsMonitoring then return end
 
-    -- 开始攻击线程
-    spawn(function()
-        local attackStartTime = tick()
-        local attackCount = 0
+        -- 测量物理延迟
+        local physicsTime = PhysicsSecurityMonitor.measurePhysicsLatency()
+        local fps = PhysicsSecurityMonitor.measureFPS()
+        local performanceStats = PhysicsSecurityMonitor.getPerformanceStats()
+
+        -- 记录数据
+        table.insert(PhysicsSecurityMonitor.Metrics.physicsLatency, physicsTime)
+        table.insert(PhysicsSecurityMonitor.Metrics.frameTimes, fps)
+        table.insert(PhysicsSecurityMonitor.Metrics.performanceStats, performanceStats)
         
-        while SoloLagDetector.AttackMode do
-            for i, remote in ipairs(attackRemotes) do
-                if not SoloLagDetector.AttackMode then break end
-                
-                if remote and remote.Parent then
-                    pcall(function()
-                        -- 使用轻量级数据，避免过大负载
-                        local attackData = {
-                            type = "performance_test",
-                            timestamp = tick(),
-                            testId = attackCount
-                        }
-
-                        if remote:IsA("RemoteEvent") then
-                            remote:FireServer(attackData)
-                        else
-                            remote:InvokeServer(attackData)
-                        end
-                        attackCount = attackCount + 1
-                    end)
-                end
-                
-                if i % 5 == 0 then -- 每5个Remote休息一下
-                    wait(0.02)
-                end
-            end
-            wait(0.1) -- 控制总体频率
+        -- 保持数据量合理
+        if #PhysicsSecurityMonitor.Metrics.physicsLatency > 200 then
+            table.remove(PhysicsSecurityMonitor.Metrics.physicsLatency, 1)
         end
-    end)
+        if #PhysicsSecurityMonitor.Metrics.frameTimes > 200 then
+            table.remove(PhysicsSecurityMonitor.Metrics.frameTimes, 1)
+        end
+        if #PhysicsSecurityMonitor.Metrics.performanceStats > 200 then
+            table.remove(PhysicsSecurityMonitor.Metrics.performanceStats, 1)
+        end
 
-    -- 监控攻击效果
-    SoloLagDetector.monitorAttackProgress(#attackRemotes)
-end
-
--- 模拟攻击（备用方案）
-function SoloLagDetector.startSimulatedAttack()
-    spawn(function()
-        local attackStartTime = tick()
-        local simulatedPackets = 0
+        -- 计算统计信息
+        local avgPhysics = PhysicsSecurityMonitor.calculateAverage(PhysicsSecurityMonitor.Metrics.physicsLatency)
+        local minPhysics = PhysicsSecurityMonitor.calculateMin(PhysicsSecurityMonitor.Metrics.physicsLatency)
+        local maxPhysics = PhysicsSecurityMonitor.calculateMax(PhysicsSecurityMonitor.Metrics.physicsLatency)
+        local avgFPS = PhysicsSecurityMonitor.calculateAverage(PhysicsSecurityMonitor.Metrics.frameTimes)
         
-        while SoloLagDetector.AttackMode do
-            -- 创建虚拟网络活动
-            simulatedPackets = simulatedPackets + 1
-            wait(0.01) -- 高频模拟
+        local currentStats = performanceStats
+        local variance = maxPhysics - minPhysics
+
+        -- 更新显示
+        local displayText = string.format(
+            "物理延迟监测 - 实时数据\n\n" ..
+            "帧时间: %.1f ms\n" ..
+            "FPS: %d\n" ..
+            "波动范围: %.1f - %.1f ms\n" ..
+            "波动幅度: %.1f ms\n\n" ..
+            "性能统计:\n" ..
+            "内存使用: %.1f MB\n" ..
+            "网络延迟: %.0f ms\n" ..
+            "数据收发: ↑%.1fKB ↓%.1fKB\n\n" ..
+            "安全监测: %s\n" ..
+            "异常计数: %d/3\n\n",
+            avgPhysics, avgFPS, minPhysics, maxPhysics, variance,
+            (currentStats.memory or 0) / 1024 / 1024,
+            currentStats.ping or 0,
+            (currentStats.dataSent or 0) / 1024,
+            (currentStats.dataReceived or 0) / 1024,
+            PhysicsSecurityMonitor.SecurityMonitoring and "开启" or "关闭",
+            PhysicsSecurityMonitor.AnomalyCount
+        )
+        
+        -- 性能评级
+        if avgPhysics < 16.7 then
+            displayText = displayText .. "性能: 优秀 (60+ FPS)\n"
+        elseif avgPhysics < 33.3 then
+            displayText = displayText .. "性能: 良好 (30-60 FPS)\n"
+        elseif avgPhysics < 50 then
+            displayText = displayText .. "性能: 一般 (20-30 FPS)\n"
+        else
+            displayText = displayText .. "性能: 卡顿 (<20 FPS)\n"
         end
-    end)
-    
-    SoloLagDetector.monitorAttackProgress(1)
-end
-
--- 监控攻击进度
-function SoloLagDetector.monitorAttackProgress(remoteCount)
-    spawn(function()
-        local attackStartTime = tick()
-        local maxResponseTime = 0
-        local attackMetrics = {
-            serverResponseTimes = {},
-            physicsLatency = {},
-            networkStability = {}
-        }
-
-        while SoloLagDetector.AttackMode do
-            -- 测量攻击期间的性能
-            local responseTime, responseSuccess = SoloLagDetector.measureServerResponse()
-            local physicsTime = SoloLagDetector.measurePhysicsLatency()
-            local stability = SoloLagDetector.measureNetworkStability()
-
-            if responseTime and responseSuccess then
-                table.insert(attackMetrics.serverResponseTimes, responseTime)
-                maxResponseTime = math.max(maxResponseTime, responseTime)
-            end
-
-            local currentAvgResponse = SoloLagDetector.calculateAverage(attackMetrics.serverResponseTimes)
-            local performanceDrop = 0
-
-            if SoloLagDetector.BaselineMetrics.serverResponse and SoloLagDetector.BaselineMetrics.serverResponse > 0 then
-                performanceDrop = ((currentAvgResponse / SoloLagDetector.BaselineMetrics.serverResponse) - 1) * 100
-            end
-
-            local attackDuration = tick() - attackStartTime
-
-            local displayText = string.format(
-                "压力测试进行中...\n\n" ..
-                "测试时长: %.1f秒\n" ..
-                "测试目标: %d个Remote\n" ..
-                "当前性能:\n" ..
-                "响应: %.1fms (基准: %.1fms)\n" ..
-                "性能变化: %+.0f%%\n" ..
-                "最大延迟: %.1fms\n\n" ..
-                "服务器状态评估:\n",
-                attackDuration,
-                remoteCount,
-                currentAvgResponse or 0,
-                SoloLagDetector.BaselineMetrics.serverResponse or 0,
-                performanceDrop,
-                maxResponseTime
-            )
-
-            -- 效果评估
-            if performanceDrop > 100 then
-                displayText = displayText .. "服务器明显卡顿 - 压力测试有效"
-            elseif performanceDrop > 50 then
-                displayText = displayText .. "服务器轻微卡顿 - 中等效果"
-            elseif performanceDrop > 20 then
-                displayText = displayText .. "服务器略有影响 - 效果一般"
+        
+        -- 安全状态
+        if PhysicsSecurityMonitor.SecurityMonitoring then
+            if PhysicsSecurityMonitor.AnomalyCount >= 2 then
+                displayText = displayText .. "安全状态: 可疑\n"
             else
-                displayText = displayText .. "服务器性能正常 - 抗压能力强"
+                displayText = displayText .. "安全状态: 正常\n"
             end
-            
-            -- 添加建议
-            displayText = displayText .. "\n\n建议: "
-            if performanceDrop > 80 then
-                displayText = displayText .. "服务器抗压能力较弱"
-            else
-                displayText = displayText .. "服务器稳定性良好"
-            end
-
-            SoloLagDetector.updateDisplay(displayText)
-            wait(1)
         end
+        
+        displayText = displayText .. string.format("\n已监测 %d 帧", #PhysicsSecurityMonitor.Metrics.physicsLatency)
+
+        -- 每60帧执行一次安全检测
+        if PhysicsSecurityMonitor.SecurityMonitoring and #PhysicsSecurityMonitor.Metrics.physicsLatency % 60 == 0 then
+            PhysicsSecurityMonitor.detectAnomalies()
+        end
+
+        PhysicsSecurityMonitor.updateDisplay(displayText)
     end)
 end
 
--- 停止测试
-function SoloLagDetector.stopTest()
-    SoloLagDetector.IsMonitoring = false
-    SoloLagDetector.AttackMode = false
+-- 停止监测
+function PhysicsSecurityMonitor.stopMonitoring()
+    PhysicsSecurityMonitor.IsMonitoring = false
 
-    if SoloLagDetector.TestConnection then
-        SoloLagDetector.TestConnection:Disconnect()
+    if PhysicsSecurityMonitor.MonitorConnection then
+        PhysicsSecurityMonitor.MonitorConnection:Disconnect()
     end
 
-    SoloLagDetector.UI.StartButton.BackgroundColor3 = Color3.new(0.2, 0.6, 0.2)
-    SoloLagDetector.UI.StartButton.Text = "开始基准测试"
-    
-    SoloLagDetector.UI.AttackButton.BackgroundColor3 = Color3.new(0.8, 0.4, 0.1)
-    SoloLagDetector.UI.AttackButton.Text = "开始压力测试"
+    PhysicsSecurityMonitor.UI.StartButton.BackgroundColor3 = Color3.new(0.2, 0.6, 0.2)
+    PhysicsSecurityMonitor.UI.StartButton.Text = "开始监测"
 
-    if SoloLagDetector.BaselineMetrics and SoloLagDetector.BaselineMetrics.established then
-        SoloLagDetector.updateDisplay("测试已停止!\n\n基准数据保留\n可重新开始压力测试")
+    -- 显示最终统计
+    if #PhysicsSecurityMonitor.Metrics.physicsLatency > 0 then
+        local avgPhysics = PhysicsSecurityMonitor.calculateAverage(PhysicsSecurityMonitor.Metrics.physicsLatency)
+        local avgFPS = PhysicsSecurityMonitor.calculateAverage(PhysicsSecurityMonitor.Metrics.frameTimes)
+        
+        local finalText = string.format(
+            "监测已停止\n\n最终统计:\n" ..
+            "平均帧时间: %.1f ms\n" ..
+            "平均FPS: %d\n" ..
+            "总监测帧数: %d\n\n",
+            avgPhysics, avgFPS, #PhysicsSecurityMonitor.Metrics.physicsLatency
+        )
+        
+        if #PhysicsSecurityMonitor.SecurityAlerts > 0 then
+            finalText = finalText .. string.format("安全警报: %d 次\n", #PhysicsSecurityMonitor.SecurityAlerts)
+            finalText = finalText .. PhysicsSecurityMonitor.showSecurityLog()
+        else
+            finalText = finalText .. "安全警报: 无\n\n点击开始监测重新启动"
+        end
+
+        PhysicsSecurityMonitor.updateDisplay(finalText)
     else
-        SoloLagDetector.updateDisplay("测试已停止")
+        PhysicsSecurityMonitor.updateDisplay("监测已停止\n\n点击开始监测重新启动")
     end
 end
 
 -- 初始化
-function SoloLagDetector.init()
+function PhysicsSecurityMonitor.init()
     if not game:IsLoaded() then
         game.Loaded:Wait()
     end
 
-    SoloLagDetector.createUI()
+    PhysicsSecurityMonitor.createUI()
 
     -- 设置按钮事件
-    SoloLagDetector.UI.StartButton.MouseButton1Click:Connect(function()
-        SoloLagDetector.startBaselineTest()
+    PhysicsSecurityMonitor.UI.StartButton.MouseButton1Click:Connect(function()
+        PhysicsSecurityMonitor.startMonitoring()
     end)
 
-    SoloLagDetector.UI.StopButton.MouseButton1Click:Connect(function()
-        SoloLagDetector.stopTest()
+    PhysicsSecurityMonitor.UI.StopButton.MouseButton1Click:Connect(function()
+        PhysicsSecurityMonitor.stopMonitoring()
     end)
 
-    SoloLagDetector.UI.AttackButton.MouseButton1Click:Connect(function()
-        SoloLagDetector.startAttackComparison()
+    PhysicsSecurityMonitor.UI.SecurityButton.MouseButton1Click:Connect(function()
+        PhysicsSecurityMonitor.toggleSecurityMonitoring()
     end)
 
     -- 添加快捷键
@@ -613,20 +491,24 @@ function SoloLagDetector.init()
             if gameProcessed then return end
 
             if input.KeyCode == Enum.KeyCode.F6 then
-                if not SoloLagDetector.IsMonitoring then
-                    SoloLagDetector.startBaselineTest()
+                if not PhysicsSecurityMonitor.IsMonitoring then
+                    PhysicsSecurityMonitor.startMonitoring()
                 else
-                    SoloLagDetector.stopTest()
+                    PhysicsSecurityMonitor.stopMonitoring()
                 end
+            elseif input.KeyCode == Enum.KeyCode.F7 then
+                PhysicsSecurityMonitor.toggleSecurityMonitoring()
             end
         end)
     end
+
+    PhysicsSecurityMonitor.updateDisplay("物理延迟与安全监测器已加载\n\n快捷键:\nF6 - 开始/停止监测\nF7 - 切换安全监测\n\n点击开始监测按钮或按F6开始")
 end
 
 -- 自动启动
 spawn(function()
     wait(3)
-    SoloLagDetector.init()
+    PhysicsSecurityMonitor.init()
 end)
 
-return SoloLagDetector
+return PhysicsSecurityMonitor
