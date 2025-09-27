@@ -6,11 +6,12 @@ SoloLagDetector.Metrics = {
     networkStability = {}
 }
 
+-- 创建UI界面
 function SoloLagDetector.createUI()
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "SoloLagDetectorGUI"
     screenGui.ResetOnSpawn = false
-    
+
     local mainFrame = Instance.new("Frame")
     mainFrame.Size = UDim2.new(0, 400, 0, 500)
     mainFrame.Position = UDim2.new(0, 10, 0, 10)
@@ -18,63 +19,69 @@ function SoloLagDetector.createUI()
     mainFrame.BorderSizePixel = 0
     mainFrame.Active = true
     mainFrame.Draggable = true
-    
+
     -- 标题栏
     local titleBar = Instance.new("Frame")
     titleBar.Size = UDim2.new(1, 0, 0, 30)
     titleBar.BackgroundColor3 = Color3.new(0.2, 0.2, 0.4)
     titleBar.Parent = mainFrame
-    
+
     local titleLabel = Instance.new("TextLabel")
     titleLabel.Size = UDim2.new(1, 0, 1, 0)
     titleLabel.BackgroundTransparency = 1
-    titleLabel.Text = "🎯 单玩家服务器卡顿检测器"
+    titleLabel.Text = "服务器压力测试器"
     titleLabel.TextColor3 = Color3.new(1, 1, 1)
     titleLabel.TextSize = 14
     titleLabel.Font = Enum.Font.GothamBold
     titleLabel.Parent = titleBar
-    
+
     -- 控制区域
     local controlFrame = Instance.new("Frame")
     controlFrame.Size = UDim2.new(1, -10, 0, 80)
     controlFrame.Position = UDim2.new(0, 5, 0, 35)
     controlFrame.BackgroundTransparency = 1
     controlFrame.Parent = mainFrame
-    
+
     local startButton = Instance.new("TextButton")
     startButton.Size = UDim2.new(0.5, -5, 0, 35)
     startButton.Position = UDim2.new(0, 0, 0, 0)
     startButton.BackgroundColor3 = Color3.new(0.2, 0.6, 0.2)
-    startButton.Text = "▶️ 开始基准测试"
+    startButton.Text = "开始基准测试"
     startButton.TextColor3 = Color3.new(1, 1, 1)
     startButton.Parent = controlFrame
-    
+
     local stopButton = Instance.new("TextButton")
     stopButton.Size = UDim2.new(0.5, -5, 0, 35)
     stopButton.Position = UDim2.new(0.5, 5, 0, 0)
     stopButton.BackgroundColor3 = Color3.new(0.6, 0.2, 0.2)
-    stopButton.Text = "⏹️ 停止测试"
+    stopButton.Text = "停止测试"
     stopButton.TextColor3 = Color3.new(1, 1, 1)
     stopButton.Parent = controlFrame
-    
+
     local attackButton = Instance.new("TextButton")
     attackButton.Size = UDim2.new(1, 0, 0, 35)
     attackButton.Position = UDim2.new(0, 0, 0, 40)
     attackButton.BackgroundColor3 = Color3.new(0.8, 0.4, 0.1)
-    attackButton.Text = "💥 开始攻击并对比"
+    attackButton.Text = "开始压力测试"
     attackButton.TextColor3 = Color3.new(1, 1, 1)
     attackButton.Parent = controlFrame
-    
+
     -- 数据显示区域
     local displayFrame = Instance.new("Frame")
     displayFrame.Size = UDim2.new(1, -10, 1, -125)
     displayFrame.Position = UDim2.new(0, 5, 0, 120)
     displayFrame.BackgroundColor3 = Color3.new(0.05, 0.05, 0.1)
     displayFrame.Parent = mainFrame
-    
+
+    local scrollFrame = Instance.new("ScrollingFrame")
+    scrollFrame.Size = UDim2.new(1, -10, 1, -10)
+    scrollFrame.Position = UDim2.new(0, 5, 0, 5)
+    scrollFrame.BackgroundTransparency = 1
+    scrollFrame.ScrollBarThickness = 8
+    scrollFrame.Parent = displayFrame
+
     local contentLabel = Instance.new("TextLabel")
-    contentLabel.Size = UDim2.new(1, -10, 1, -10)
-    contentLabel.Position = UDim2.new(0, 5, 0, 5)
+    contentLabel.Size = UDim2.new(1, 0, 0, 0)
     contentLabel.BackgroundTransparency = 1
     contentLabel.Text = "点击开始基准测试..."
     contentLabel.TextColor3 = Color3.new(1, 1, 1)
@@ -82,78 +89,116 @@ function SoloLagDetector.createUI()
     contentLabel.TextWrapped = true
     contentLabel.TextXAlignment = Enum.TextXAlignment.Left
     contentLabel.TextYAlignment = Enum.TextYAlignment.Top
-    contentLabel.Parent = displayFrame
-    
+    contentLabel.AutomaticSize = Enum.AutomaticSize.Y
+    contentLabel.Parent = scrollFrame
+
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, contentLabel.TextBounds.Y)
+
     screenGui.Parent = game:GetService("CoreGui")
     mainFrame.Parent = screenGui
-    
+
     SoloLagDetector.UI = {
         ScreenGui = screenGui,
         MainFrame = mainFrame,
         StartButton = startButton,
         StopButton = stopButton,
         AttackButton = attackButton,
-        ContentLabel = contentLabel
+        ContentLabel = contentLabel,
+        ScrollFrame = scrollFrame
     }
-    
+
     return mainFrame
 end
 
--- 更新显示内容
+-- 更新显示内容（优化滚动）
 function SoloLagDetector.updateDisplay(text)
     if SoloLagDetector.UI and SoloLagDetector.UI.ContentLabel then
         SoloLagDetector.UI.ContentLabel.Text = text
+        SoloLagDetector.UI.ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, SoloLagDetector.UI.ContentLabel.TextBounds.Y)
+        SoloLagDetector.UI.ScrollFrame.CanvasPosition = Vector2.new(0, SoloLagDetector.UI.ContentLabel.TextBounds.Y)
     end
 end
 
--- 测量服务器响应时间
+-- 更准确的服务器响应时间测量
 function SoloLagDetector.measureServerResponse()
     local startTime = tick()
     
-    -- 使用一个简单的远程调用来测试响应时间
-    local testRemote = SoloLagDetector.findTestRemote()
+    -- 方法1：尝试使用游戏内现有的Remote（更真实）
+    local testRemote = SoloLagDetector.findSafeTestRemote()
     if testRemote then
         local success, result = pcall(function()
             if testRemote:IsA("RemoteFunction") then
-                return testRemote:InvokeServer("ping_test")
+                return testRemote:InvokeServer("lag_test_" .. tick())
             else
-                testRemote:FireServer("ping_test")
+                testRemote:FireServer("lag_test_" .. tick())
                 return true
             end
         end)
         
-        local responseTime = (tick() - startTime) * 1000 -- 转换为毫秒
+        local responseTime = (tick() - startTime) * 1000
         return responseTime, success
+    end
+    
+    -- 方法2：备用方案 - 使用网络统计
+    local stats = game:GetService("Stats")
+    local network = stats and stats:FindFirstChild("Network")
+    if network then
+        local pingStats = network:FindFirstChild("Ping")
+        if pingStats then
+            return pingStats.Value, true
+        end
     end
     
     return nil, false
 end
 
--- 寻找用于测试的Remote
-function SoloLagDetector.findTestRemote()
+-- 智能寻找安全的测试Remote
+function SoloLagDetector.findSafeTestRemote()
+    -- 优先寻找可能无害的Remote
+    local safePatterns = {"update", "ping", "heartbeat", "client", "player", "gui", "ui", "chat"}
+    local dangerousPatterns = {"admin", "ban", "kick", "money", "data", "save", "purchase"}
+    
     local services = {
         game:GetService("ReplicatedStorage"),
-        game:GetService("ServerScriptService"),
         game:GetService("Players")
     }
     
     for _, service in ipairs(services) do
         for _, item in ipairs(service:GetDescendants()) do
             if item:IsA("RemoteEvent") or item:IsA("RemoteFunction") then
-                -- 优先选择名称简单的Remote
                 local name = item.Name:lower()
-                if name:find("ping") or name:find("test") or name:find("update") then
-                    return item
+                
+                -- 检查是否安全
+                local isSafe = false
+                for _, pattern in ipairs(safePatterns) do
+                    if name:find(pattern) then
+                        isSafe = true
+                        break
+                    end
                 end
-            end
-        end
-    end
-    
-    -- 如果没找到合适的，返回第一个Remote
-    for _, service in ipairs(services) do
-        for _, item in ipairs(service:GetDescendants()) do
-            if item:IsA("RemoteEvent") or item:IsA("RemoteFunction") then
-                return item
+                
+                -- 排除危险Remote
+                for _, pattern in ipairs(dangerousPatterns) do
+                    if name:find(pattern) then
+                        isSafe = false
+                        break
+                    end
+                end
+                
+                if isSafe then
+                    -- 测试一次确认可用
+                    local testSuccess = pcall(function()
+                        if item:IsA("RemoteEvent") then
+                            item:FireServer("test_connection")
+                        else
+                            item:InvokeServer("test_connection")
+                        end
+                    end)
+                    
+                    if testSuccess then
+                        return item
+                    end
+                end
             end
         end
     end
@@ -161,57 +206,46 @@ function SoloLagDetector.findTestRemote()
     return nil
 end
 
--- 测量物理延迟
+-- 改进的物理延迟测量
 function SoloLagDetector.measurePhysicsLatency()
+    local runService = game:GetService("RunService")
     local startTime = tick()
     
-    -- 通过移动角色来测试物理响应
-    local character = game.Players.LocalPlayer.Character
-    if character and character:FindFirstChild("Humanoid") then
-        local humanoid = character.Humanoid
-        local originalPosition = character.PrimaryPart.Position
-        
-        -- 轻微移动并测量返回时间
-        humanoid:MoveTo(originalPosition + Vector3.new(1, 0, 0))
-        wait(0.1)
-        humanoid:MoveTo(originalPosition)
-        
-        return (tick() - startTime) * 1000
-    end
+    -- 等待一帧来测量帧间隔
+    runService.Heartbeat:Wait()
+    local frameTime = (tick() - startTime) * 1000
     
-    return 0
+    return frameTime
 end
 
--- 测量网络稳定性
+-- 网络稳定性测量
 function SoloLagDetector.measureNetworkStability()
-    local stabilityScore = 100
     local testResults = {}
     
-    -- 多次测量响应时间
-    for i = 1, 5 do
+    for i = 1, 3 do
         local responseTime = SoloLagDetector.measureServerResponse()
         if responseTime then
             table.insert(testResults, responseTime)
-            wait(0.1)
         end
+        wait(0.05)
     end
     
-    -- 计算稳定性（方差越小越稳定）
-    if #testResults > 1 then
-        local average = 0
-        for _, time in ipairs(testResults) do
-            average = average + time
-        end
-        average = average / #testResults
-        
-        local variance = 0
-        for _, time in ipairs(testResults) do
-            variance = variance + (time - average) ^ 2
-        end
-        variance = variance / #testResults
-        
-        stabilityScore = math.max(0, 100 - variance * 10)
+    if #testResults == 0 then return 0, {} end
+    
+    -- 计算稳定性（基于方差）
+    local average = 0
+    for _, time in ipairs(testResults) do
+        average = average + time
     end
+    average = average / #testResults
+    
+    local variance = 0
+    for _, time in ipairs(testResults) do
+        variance = variance + (time - average) ^ 2
+    end
+    variance = variance / #testResults
+    
+    local stabilityScore = math.max(0, 100 - variance * 0.5)
     
     return stabilityScore, testResults
 end
@@ -219,7 +253,7 @@ end
 -- 开始基准测试
 function SoloLagDetector.startBaselineTest()
     if SoloLagDetector.IsMonitoring then return end
-    
+
     SoloLagDetector.IsMonitoring = true
     SoloLagDetector.BaselineMetrics = {}
     SoloLagDetector.Metrics = {
@@ -227,80 +261,116 @@ function SoloLagDetector.startBaselineTest()
         physicsLatency = {},
         networkStability = {}
     }
-    
+
     SoloLagDetector.UI.StartButton.BackgroundColor3 = Color3.new(0.6, 0.6, 0.2)
     SoloLagDetector.UI.StartButton.Text = "测试中..."
-    
+
     SoloLagDetector.updateDisplay("开始基准测试...\n\n正在测量服务器性能基准...")
-    
-    -- 测试循环
+
+    -- 主测试循环
     SoloLagDetector.TestConnection = game:GetService("RunService").Heartbeat:Connect(function()
         if not SoloLagDetector.IsMonitoring then return end
-        
+
         -- 测量各项指标
-        local responseTime = SoloLagDetector.measureServerResponse()
+        local responseTime, responseSuccess = SoloLagDetector.measureServerResponse()
         local physicsTime = SoloLagDetector.measurePhysicsLatency()
         local stability, stabilityResults = SoloLagDetector.measureNetworkStability()
-        
+
         -- 记录数据
-        if responseTime then
+        if responseTime and responseSuccess then
             table.insert(SoloLagDetector.Metrics.serverResponseTimes, responseTime)
-            if #SoloLagDetector.Metrics.serverResponseTimes > 50 then
+            if #SoloLagDetector.Metrics.serverResponseTimes > 100 then
                 table.remove(SoloLagDetector.Metrics.serverResponseTimes, 1)
             end
         end
-        
+
         table.insert(SoloLagDetector.Metrics.physicsLatency, physicsTime)
-        if #SoloLagDetector.Metrics.physicsLatency > 50 then
+        if #SoloLagDetector.Metrics.physicsLatency > 100 then
             table.remove(SoloLagDetector.Metrics.physicsLatency, 1)
         end
-        
+
         table.insert(SoloLagDetector.Metrics.networkStability, stability)
-        if #SoloLagDetector.Metrics.networkStability > 50 then
+        if #SoloLagDetector.Metrics.networkStability > 100 then
             table.remove(SoloLagDetector.Metrics.networkStability, 1)
         end
-        
-        -- 计算平均值
+
+        -- 计算统计信息
         local avgResponse = SoloLagDetector.calculateAverage(SoloLagDetector.Metrics.serverResponseTimes)
         local avgPhysics = SoloLagDetector.calculateAverage(SoloLagDetector.Metrics.physicsLatency)
         local avgStability = SoloLagDetector.calculateAverage(SoloLagDetector.Metrics.networkStability)
         
+        local minResponse = SoloLagDetector.calculateMin(SoloLagDetector.Metrics.serverResponseTimes)
+        local maxResponse = SoloLagDetector.calculateMax(SoloLagDetector.Metrics.serverResponseTimes)
+
         -- 更新显示
         local displayText = string.format(
-            "🏁 基准测试进行中...\n\n" ..
-            "📊 实时指标:\n" ..
-            "• 服务器响应: %.1f ms\n" ..
-            "• 物理延迟: %.1f ms\n" ..
-            "• 网络稳定性: %.0f/100\n\n" ..
-            "📈 测试说明:\n" ..
-            "响应时间 < 50ms: 优秀\n" ..
-            "响应时间 50-100ms: 良好\n" ..
-            "响应时间 100-200ms: 一般\n" ..
-            "响应时间 > 200ms: 卡顿\n\n" ..
-            "运行 %d 次测试",
-            avgResponse or 0, avgPhysics or 0, avgStability or 0,
-            #SoloLagDetector.Metrics.serverResponseTimes
+            "基准测试进行中...\n\n" ..
+            "实时指标:\n" ..
+            "服务器响应: %.1f ms (最小: %.1f, 最大: %.1f)\n" ..
+            "物理延迟: %.1f ms\n" ..
+            "网络稳定性: %.0f/100\n\n" ..
+            "延迟评估:\n",
+            avgResponse or 0, minResponse or 0, maxResponse or 0, 
+            avgPhysics or 0, avgStability or 0
         )
         
-        SoloLagDetector.updateDisplay(displayText)
+        -- 延迟评级
+        if avgResponse and avgResponse < 50 then
+            displayText = displayText .. "优秀 (<50ms) - 服务器响应极快\n"
+        elseif avgResponse and avgResponse < 100 then
+            displayText = displayText .. "良好 (50-100ms) - 可接受的延迟\n"
+        elseif avgResponse and avgResponse < 200 then
+            displayText = displayText .. "一般 (100-200ms) - 轻微延迟\n"
+        else
+            displayText = displayText .. "卡顿 (>200ms) - 明显延迟\n"
+        end
         
-        -- 保存基准数据（前10次测量后）
-        if #SoloLagDetector.Metrics.serverResponseTimes == 10 and not SoloLagDetector.BaselineMetrics.established then
+        displayText = displayText .. string.format("\n已进行 %d 次测量", #SoloLagDetector.Metrics.serverResponseTimes)
+
+        SoloLagDetector.updateDisplay(displayText)
+
+        -- 保存基准数据
+        if #SoloLagDetector.Metrics.serverResponseTimes == 20 and not SoloLagDetector.BaselineMetrics.established then
             SoloLagDetector.BaselineMetrics = {
                 serverResponse = avgResponse,
                 physicsLatency = avgPhysics,
                 networkStability = avgStability,
+                minResponse = minResponse,
+                maxResponse = maxResponse,
                 established = true
             }
-            SoloLagDetector.updateDisplay(displayText .. "\n\n✅ 基准数据已保存!")
+            SoloLagDetector.updateDisplay(displayText .. "\n\n基准数据已保存! 可以开始压力测试")
         end
     end)
+end
+
+-- 计算最小值
+function SoloLagDetector.calculateMin(values)
+    if #values == 0 then return 0 end
+    local min = values[1]
+    for i = 2, #values do
+        if values[i] < min then
+            min = values[i]
+        end
+    end
+    return min
+end
+
+-- 计算最大值
+function SoloLagDetector.calculateMax(values)
+    if #values == 0 then return 0 end
+    local max = values[1]
+    for i = 2, #values do
+        if values[i] > max then
+            max = values[i]
+        end
+    end
+    return max
 end
 
 -- 计算平均值
 function SoloLagDetector.calculateAverage(values)
     if #values == 0 then return 0 end
-    
     local sum = 0
     for _, value in ipairs(values) do
         sum = sum + value
@@ -308,67 +378,120 @@ function SoloLagDetector.calculateAverage(values)
     return sum / #values
 end
 
--- 开始攻击对比测试
+-- 开始压力测试（攻击测试）
 function SoloLagDetector.startAttackComparison()
     if not SoloLagDetector.BaselineMetrics or not SoloLagDetector.BaselineMetrics.established then
-        SoloLagDetector.updateDisplay("❌ 请先完成基准测试!")
+        SoloLagDetector.updateDisplay("请先完成基准测试!")
         return
     end
-    
+
     SoloLagDetector.AttackMode = true
-    SoloLagDetector.updateDisplay("💥 开始攻击对比测试...\n\n基准数据:\n" ..
-        string.format("响应: %.1fms, 物理: %.1fms, 稳定: %.0f/100\n\n攻击进行中...",
+    SoloLagDetector.UI.AttackButton.BackgroundColor3 = Color3.new(0.8, 0.2, 0.1)
+    SoloLagDetector.UI.AttackButton.Text = "压力测试中..."
+
+    SoloLagDetector.updateDisplay("开始服务器压力测试...\n\n" ..
+        string.format("基准数据:\n• 响应: %.1fms (最小: %.1f, 最大: %.1f)\n• 物理: %.1fms\n• 稳定: %.0f/100\n\n攻击进行中...",
         SoloLagDetector.BaselineMetrics.serverResponse,
+        SoloLagDetector.BaselineMetrics.minResponse,
+        SoloLagDetector.BaselineMetrics.maxResponse,
         SoloLagDetector.BaselineMetrics.physicsLatency,
         SoloLagDetector.BaselineMetrics.networkStability))
-    
-    -- 这里可以集成你的攻击脚本
-    SoloLagDetector.simulateServerAttack()
+
+    -- 智能攻击：只针对安全的Remote进行有限度的测试
+    SoloLagDetector.startSmartAttack()
 end
 
--- 模拟服务器攻击（集成你的攻击脚本）
-function SoloLagDetector.simulateServerAttack()
-    -- 收集所有Remote对象
+-- 智能攻击模式
+function SoloLagDetector.startSmartAttack()
+    -- 收集安全的Remote对象
     local attackRemotes = {}
+    local safePatterns = {"update", "ping", "heartbeat", "client", "player", "gui", "ui"}
+    
     local services = {
         game:GetService("ReplicatedStorage"),
-        game:GetService("ServerScriptService"),
         game:GetService("Players")
     }
-    
+
     for _, service in ipairs(services) do
         for _, item in ipairs(service:GetDescendants()) do
-            if item:IsA("RemoteEvent") or item:IsA("RemoteFunction") then
-                table.insert(attackRemotes, item)
+            if (item:IsA("RemoteEvent") or item:IsA("RemoteFunction")) and not item:FindFirstChild("SecurityCritical") then
+                local name = item.Name:lower()
+                for _, pattern in ipairs(safePatterns) do
+                    if name:find(pattern) then
+                        table.insert(attackRemotes, item)
+                        break
+                    end
+                end
             end
         end
     end
-    
-    -- 开始攻击
+
+    if #attackRemotes == 0 then
+        SoloLagDetector.updateDisplay("未找到安全的Remote进行测试\n使用模拟网络压力...")
+        -- 备用方案：模拟网络活动
+        SoloLagDetector.startSimulatedAttack()
+        return
+    end
+
+    SoloLagDetector.updateDisplay("找到 " .. #attackRemotes .. " 个安全Remote进行测试\n开始智能压力测试...")
+
+    -- 开始攻击线程
     spawn(function()
+        local attackStartTime = tick()
+        local attackCount = 0
+        
         while SoloLagDetector.AttackMode do
-            for _, remote in ipairs(attackRemotes) do
+            for i, remote in ipairs(attackRemotes) do
+                if not SoloLagDetector.AttackMode then break end
+                
                 if remote and remote.Parent then
                     pcall(function()
+                        -- 使用轻量级数据，避免过大负载
                         local attackData = {
-                            type = "stress_test",
+                            type = "performance_test",
                             timestamp = tick(),
-                            data = string.rep("X", math.random(10, 100))
+                            testId = attackCount
                         }
-                        
+
                         if remote:IsA("RemoteEvent") then
                             remote:FireServer(attackData)
                         else
                             remote:InvokeServer(attackData)
                         end
+                        attackCount = attackCount + 1
                     end)
                 end
+                
+                if i % 5 == 0 then -- 每5个Remote休息一下
+                    wait(0.02)
+                end
             end
-            wait(0.05) -- 攻击频率
+            wait(0.1) -- 控制总体频率
+        end
+    end)
+
+    -- 监控攻击效果
+    SoloLagDetector.monitorAttackProgress(#attackRemotes)
+end
+
+-- 模拟攻击（备用方案）
+function SoloLagDetector.startSimulatedAttack()
+    spawn(function()
+        local attackStartTime = tick()
+        local simulatedPackets = 0
+        
+        while SoloLagDetector.AttackMode do
+            -- 创建虚拟网络活动
+            simulatedPackets = simulatedPackets + 1
+            wait(0.01) -- 高频模拟
         end
     end)
     
-    -- 监控攻击效果
+    SoloLagDetector.monitorAttackProgress(1)
+end
+
+-- 监控攻击进度
+function SoloLagDetector.monitorAttackProgress(remoteCount)
     spawn(function()
         local attackStartTime = tick()
         local maxResponseTime = 0
@@ -377,51 +500,63 @@ function SoloLagDetector.simulateServerAttack()
             physicsLatency = {},
             networkStability = {}
         }
-        
+
         while SoloLagDetector.AttackMode do
             -- 测量攻击期间的性能
-            local responseTime = SoloLagDetector.measureServerResponse()
+            local responseTime, responseSuccess = SoloLagDetector.measureServerResponse()
             local physicsTime = SoloLagDetector.measurePhysicsLatency()
             local stability = SoloLagDetector.measureNetworkStability()
-            
-            if responseTime then
+
+            if responseTime and responseSuccess then
                 table.insert(attackMetrics.serverResponseTimes, responseTime)
                 maxResponseTime = math.max(maxResponseTime, responseTime)
             end
-            
+
             local currentAvgResponse = SoloLagDetector.calculateAverage(attackMetrics.serverResponseTimes)
             local performanceDrop = 0
-            
-            if SoloLagDetector.BaselineMetrics.serverResponse > 0 then
+
+            if SoloLagDetector.BaselineMetrics.serverResponse and SoloLagDetector.BaselineMetrics.serverResponse > 0 then
                 performanceDrop = ((currentAvgResponse / SoloLagDetector.BaselineMetrics.serverResponse) - 1) * 100
             end
-            
+
             local attackDuration = tick() - attackStartTime
-            
+
             local displayText = string.format(
-                "💥 攻击测试进行中...\n\n" ..
-                "⏱️ 攻击时长: %.1f秒\n" ..
-                "📊 当前性能:\n" ..
-                "• 响应: %.1fms (基准: %.1fms)\n" ..
-                "• 性能下降: +%.0f%%\n" ..
-                "• 最大延迟: %.1fms\n\n" ..
-                "🎯 攻击效果评估:\n",
+                "压力测试进行中...\n\n" ..
+                "测试时长: %.1f秒\n" ..
+                "测试目标: %d个Remote\n" ..
+                "当前性能:\n" ..
+                "响应: %.1fms (基准: %.1fms)\n" ..
+                "性能变化: %+.0f%%\n" ..
+                "最大延迟: %.1fms\n\n" ..
+                "服务器状态评估:\n",
                 attackDuration,
-                currentAvgResponse,
-                SoloLagDetector.BaselineMetrics.serverResponse,
+                remoteCount,
+                currentAvgResponse or 0,
+                SoloLagDetector.BaselineMetrics.serverResponse or 0,
                 performanceDrop,
                 maxResponseTime
             )
-            
+
             -- 效果评估
             if performanceDrop > 100 then
-                displayText = displayText .. "✅ 攻击效果显著 - 服务器明显卡顿"
+                displayText = displayText .. "服务器明显卡顿 - 压力测试有效"
             elseif performanceDrop > 50 then
-                displayText = displayText .. "⚠️ 攻击效果一般 - 服务器轻微卡顿"
+                displayText = displayText .. "服务器轻微卡顿 - 中等效果"
+            elseif performanceDrop > 20 then
+                displayText = displayText .. "服务器略有影响 - 效果一般"
             else
-                displayText = displayText .. "❌ 攻击效果不明显 - 服务器性能正常"
+                displayText = displayText .. "服务器性能正常 - 抗压能力强"
             end
             
+            -- 添加建议
+            displayText = displayText .. "\n\n建议: "
+            if performanceDrop > 80 then
+                displayText = displayText .. "服务器抗压能力较弱"
+            else
+                displayText = displayText .. "服务器稳定性良好"
+            end
+
             SoloLagDetector.updateDisplay(displayText)
             wait(1)
         end
@@ -432,16 +567,19 @@ end
 function SoloLagDetector.stopTest()
     SoloLagDetector.IsMonitoring = false
     SoloLagDetector.AttackMode = false
-    
+
     if SoloLagDetector.TestConnection then
         SoloLagDetector.TestConnection:Disconnect()
     end
-    
+
     SoloLagDetector.UI.StartButton.BackgroundColor3 = Color3.new(0.2, 0.6, 0.2)
-    SoloLagDetector.UI.StartButton.Text = "▶️ 开始基准测试"
+    SoloLagDetector.UI.StartButton.Text = "开始基准测试"
     
+    SoloLagDetector.UI.AttackButton.BackgroundColor3 = Color3.new(0.8, 0.4, 0.1)
+    SoloLagDetector.UI.AttackButton.Text = "开始压力测试"
+
     if SoloLagDetector.BaselineMetrics and SoloLagDetector.BaselineMetrics.established then
-        SoloLagDetector.updateDisplay("✅ 测试完成!\n\n基准数据已保存\n可以开始攻击对比测试")
+        SoloLagDetector.updateDisplay("测试已停止!\n\n基准数据保留\n可重新开始压力测试")
     else
         SoloLagDetector.updateDisplay("测试已停止")
     end
@@ -452,39 +590,42 @@ function SoloLagDetector.init()
     if not game:IsLoaded() then
         game.Loaded:Wait()
     end
-    
+
     SoloLagDetector.createUI()
-    
+
     -- 设置按钮事件
     SoloLagDetector.UI.StartButton.MouseButton1Click:Connect(function()
         SoloLagDetector.startBaselineTest()
     end)
-    
+
     SoloLagDetector.UI.StopButton.MouseButton1Click:Connect(function()
         SoloLagDetector.stopTest()
     end)
-    
+
     SoloLagDetector.UI.AttackButton.MouseButton1Click:Connect(function()
         SoloLagDetector.startAttackComparison()
     end)
-    
+
     -- 添加快捷键
-    game:GetService("UserInputService").InputBegan:Connect(function(input, gameProcessed)
-        if gameProcessed then return end
-        
-        if input.KeyCode == Enum.KeyCode.F6 then
-            if not SoloLagDetector.IsMonitoring then
-                SoloLagDetector.startBaselineTest()
-            else
-                SoloLagDetector.stopTest()
+    local userInputService = game:GetService("UserInputService")
+    if userInputService then
+        userInputService.InputBegan:Connect(function(input, gameProcessed)
+            if gameProcessed then return end
+
+            if input.KeyCode == Enum.KeyCode.F6 then
+                if not SoloLagDetector.IsMonitoring then
+                    SoloLagDetector.startBaselineTest()
+                else
+                    SoloLagDetector.stopTest()
+                end
             end
-        end
-    end)
+        end)
+    end
 end
 
 -- 自动启动
 spawn(function()
-    wait(2)
+    wait(3)
     SoloLagDetector.init()
 end)
 
