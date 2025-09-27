@@ -1,4 +1,4 @@
--- 物理延迟与安全监测
+-- 物理延迟监测
 local PhysicsSecurityMonitor = {}
 PhysicsSecurityMonitor.IsMonitoring = false
 PhysicsSecurityMonitor.Metrics = {
