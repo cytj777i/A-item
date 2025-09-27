@@ -1,514 +1,423 @@
--- 物理延迟监测
-local PhysicsSecurityMonitor = {}
-PhysicsSecurityMonitor.IsMonitoring = false
-PhysicsSecurityMonitor.Metrics = {
-    physicsLatency = {},
-    frameTimes = {},
-    performanceStats = {}
+-- 文件名：ServerImpactTest_Enhanced.lua
+-- 增强版服务器影响测试 - 包含影响程度检测
+
+local ImpactTest = {}
+ImpactTest.Testing = false
+ImpactTest.PlayerData = {}
+ImpactTest.ImpactLevels = {
+    NONE = {name = "无影响", color = Color3.new(0.2, 0.8, 0.2)},
+    LIGHT = {name = "轻度影响", color = Color3.new(0.8, 0.8, 0.2)},
+    MEDIUM = {name = "中度影响", color = Color3.new(1, 0.5, 0)},
+    HEAVY = {name = "重度影响", color = Color3.new(1, 0.2, 0.2)},
+    SEVERE = {name = "严重影响", color = Color3.new(0.8, 0, 0)}
 }
 
--- 安全监测阈值
-PhysicsSecurityMonitor.SecurityThresholds = {
-    highLatency = 100,    -- 超过100ms视为异常
-    highVariance = 50,    -- 波动超过50ms视为异常
-    fpsDrop = 20,         -- FPS下降超过20帧视为异常
-}
-
-PhysicsSecurityMonitor.AnomalyCount = 0
-PhysicsSecurityMonitor.NormalBaseline = nil
-PhysicsSecurityMonitor.SecurityAlerts = {}
-
--- 创建UI界面
-function PhysicsSecurityMonitor.createUI()
+-- 创建增强界面
+function ImpactTest.createUI()
     local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "PhysicsSecurityMonitorGUI"
+    screenGui.Name = "ImpactTestGUI_Enhanced"
     screenGui.ResetOnSpawn = false
 
     local mainFrame = Instance.new("Frame")
-    mainFrame.Size = UDim2.new(0, 400, 0, 400)
-    mainFrame.Position = UDim2.new(0, 10, 0, 10)
-    mainFrame.BackgroundColor3 = Color3.new(0.1, 0.1, 0.2)
-    mainFrame.BorderSizePixel = 0
+    mainFrame.Size = UDim2.new(0, 350, 0, 280) -- 增加高度以容纳更多信息
+    mainFrame.Position = UDim2.new(0.5, -175, 0.5, -140)
+    mainFrame.BackgroundColor3 = Color3.new(0.15, 0.15, 0.15)
+    mainFrame.BorderSizePixel = 2
+    mainFrame.BorderColor3 = Color3.new(0.5, 0.5, 0.5)
     mainFrame.Active = true
     mainFrame.Draggable = true
 
     -- 标题栏
     local titleBar = Instance.new("Frame")
-    titleBar.Size = UDim2.new(1, 0, 0, 30)
-    titleBar.BackgroundColor3 = Color3.new(0.2, 0.2, 0.4)
+    titleBar.Size = UDim2.new(1, 0, 0, 25)
+    titleBar.BackgroundColor3 = Color3.new(0.3, 0.3, 0.3)
     titleBar.Parent = mainFrame
 
     local titleLabel = Instance.new("TextLabel")
     titleLabel.Size = UDim2.new(1, 0, 1, 0)
     titleLabel.BackgroundTransparency = 1
-    titleLabel.Text = "物理延迟监测"
+    titleLabel.Text = "服务器影响测试 - 增强版"
     titleLabel.TextColor3 = Color3.new(1, 1, 1)
     titleLabel.TextSize = 14
     titleLabel.Font = Enum.Font.GothamBold
     titleLabel.Parent = titleBar
 
-    -- 控制区域
-    local controlFrame = Instance.new("Frame")
-    controlFrame.Size = UDim2.new(1, -10, 0, 80)
-    controlFrame.Position = UDim2.new(0, 5, 0, 35)
-    controlFrame.BackgroundTransparency = 1
-    controlFrame.Parent = mainFrame
+    -- 状态显示
+    local statusLabel = Instance.new("TextLabel")
+    statusLabel.Size = UDim2.new(1, -20, 0, 100)
+    statusLabel.Position = UDim2.new(0, 10, 0, 30)
+    statusLabel.BackgroundTransparency = 1
+    statusLabel.Text = "点击开始测试按钮\n测试服务器影响程度\n\n状态：等待测试..."
+    statusLabel.TextColor3 = Color3.new(1, 1, 1)
+    statusLabel.TextSize = 12
+    statusLabel.TextWrapped = true
+    statusLabel.TextXAlignment = Enum.TextXAlignment.Center
+    statusLabel.Parent = mainFrame
 
-    local startButton = Instance.new("TextButton")
-    startButton.Size = UDim2.new(0.5, -5, 0, 35)
-    startButton.Position = UDim2.new(0, 0, 0, 0)
-    startButton.BackgroundColor3 = Color3.new(0.2, 0.6, 0.2)
-    startButton.Text = "开始监测"
-    startButton.TextColor3 = Color3.new(1, 1, 1)
-    startButton.Parent = controlFrame
+    -- 控制按钮
+    local startBtn = Instance.new("TextButton")
+    startBtn.Size = UDim2.new(0.45, 0, 0, 30)
+    startBtn.Position = UDim2.new(0.025, 0, 0, 140)
+    startBtn.BackgroundColor3 = Color3.new(0.2, 0.6, 0.2)
+    startBtn.Text = "开始测试"
+    startBtn.TextColor3 = Color3.new(1, 1, 1)
+    startBtn.Parent = mainFrame
 
-    local stopButton = Instance.new("TextButton")
-    stopButton.Size = UDim2.new(0.5, -5, 0, 35)
-    stopButton.Position = UDim2.new(0.5, 5, 0, 0)
-    stopButton.BackgroundColor3 = Color3.new(0.6, 0.2, 0.2)
-    stopButton.Text = "停止监测"
-    stopButton.TextColor3 = Color3.new(1, 1, 1)
-    stopButton.Parent = controlFrame
+    local stopBtn = Instance.new("TextButton")
+    stopBtn.Size = UDim2.new(0.45, 0, 0, 30)
+    stopBtn.Position = UDim2.new(0.525, 0, 0, 140)
+    stopBtn.BackgroundColor3 = Color3.new(0.8, 0.2, 0.2)
+    stopBtn.Text = "停止测试"
+    stopBtn.TextColor3 = Color3.new(1, 1, 1)
+    stopBtn.Parent = mainFrame
 
-    local securityButton = Instance.new("TextButton")
-    securityButton.Size = UDim2.new(1, 0, 0, 35)
-    securityButton.Position = UDim2.new(0, 0, 0, 40)
-    securityButton.BackgroundColor3 = Color3.new(0.3, 0.3, 0.6)
-    securityButton.Text = "安全监测: 关闭"
-    securityButton.TextColor3 = Color3.new(1, 1, 1)
-    securityButton.Parent = controlFrame
+    -- 影响程度显示
+    local impactFrame = Instance.new("Frame")
+    impactFrame.Size = UDim2.new(1, -20, 0, 60)
+    impactFrame.Position = UDim2.new(0, 10, 0, 180)
+    impactFrame.BackgroundColor3 = Color3.new(0.1, 0.1, 0.1)
+    impactFrame.BorderSizePixel = 1
+    impactFrame.BorderColor3 = Color3.new(0.3, 0.3, 0.3)
+    impactFrame.Parent = mainFrame
 
-    -- 数据显示区域
-    local displayFrame = Instance.new("Frame")
-    displayFrame.Size = UDim2.new(1, -10, 1, -125)
-    displayFrame.Position = UDim2.new(0, 5, 0, 120)
-    displayFrame.BackgroundColor3 = Color3.new(0.05, 0.05, 0.1)
-    displayFrame.Parent = mainFrame
+    local impactTitle = Instance.new("TextLabel")
+    impactTitle.Size = UDim2.new(1, 0, 0, 20)
+    impactTitle.BackgroundTransparency = 1
+    impactTitle.Text = "影响程度分析"
+    impactTitle.TextColor3 = Color3.new(1, 1, 1)
+    impactTitle.TextSize = 12
+    impactTitle.Font = Enum.Font.GothamBold
+    impactTitle.Parent = impactFrame
 
-    local scrollFrame = Instance.new("ScrollingFrame")
-    scrollFrame.Size = UDim2.new(1, -10, 1, -10)
-    scrollFrame.Position = UDim2.new(0, 5, 0, 5)
-    scrollFrame.BackgroundTransparency = 1
-    scrollFrame.ScrollBarThickness = 8
-    scrollFrame.Parent = displayFrame
+    local impactLevelLabel = Instance.new("TextLabel")
+    impactLevelLabel.Size = UDim2.new(0.5, -5, 0, 20)
+    impactLevelLabel.Position = UDim2.new(0, 5, 0, 20)
+    impactLevelLabel.BackgroundTransparency = 1
+    impactLevelLabel.Text = "等级: 未测试"
+    impactLevelLabel.TextColor3 = Color3.new(1, 1, 1)
+    impactLevelLabel.TextSize = 11
+    impactLevelLabel.TextXAlignment = Enum.TextXAlignment.Left
+    impactLevelLabel.Parent = impactFrame
 
-    local contentLabel = Instance.new("TextLabel")
-    contentLabel.Size = UDim2.new(1, 0, 0, 0)
-    contentLabel.BackgroundTransparency = 1
-    contentLabel.Text = "点击开始监测物理延迟..."
-    contentLabel.TextColor3 = Color3.new(1, 1, 1)
-    contentLabel.TextSize = 11
-    contentLabel.TextWrapped = true
-    contentLabel.TextXAlignment = Enum.TextXAlignment.Left
-    contentLabel.TextYAlignment = Enum.TextYAlignment.Top
-    contentLabel.AutomaticSize = Enum.AutomaticSize.Y
-    contentLabel.Parent = scrollFrame
+    local affectedPlayersLabel = Instance.new("TextLabel")
+    affectedPlayersLabel.Size = UDim2.new(0.5, -5, 0, 20)
+    affectedPlayersLabel.Position = UDim2.new(0.5, 0, 0, 20)
+    affectedPlayersLabel.BackgroundTransparency = 1
+    affectedPlayersLabel.Text = "受影响: 0/0"
+    affectedPlayersLabel.TextColor3 = Color3.new(1, 1, 1)
+    affectedPlayersLabel.TextSize = 11
+    affectedPlayersLabel.TextXAlignment = Enum.TextXAlignment.Left
+    affectedPlayersLabel.Parent = impactFrame
 
-    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, contentLabel.TextBounds.Y)
+    local teleportsLabel = Instance.new("TextLabel")
+    teleportsLabel.Size = UDim2.new(0.5, -5, 0, 20)
+    teleportsLabel.Position = UDim2.new(0, 5, 0, 40)
+    teleportsLabel.BackgroundTransparency = 1
+    teleportsLabel.Text = "瞬移次数: 0"
+    teleportsLabel.TextColor3 = Color3.new(1, 1, 1)
+    teleportsLabel.TextSize = 11
+    teleportsLabel.TextXAlignment = Enum.TextXAlignment.Left
+    teleportsLabel.Parent = impactFrame
+
+    local avgLatencyLabel = Instance.new("TextLabel")
+    avgLatencyLabel.Size = UDim2.new(0.5, -5, 0, 20)
+    avgLatencyLabel.Position = UDim2.new(0.5, 0, 0, 40)
+    avgLatencyLabel.BackgroundTransparency = 1
+    avgLatencyLabel.Text = "平均延迟: 0ms"
+    avgLatencyLabel.TextColor3 = Color3.new(1, 1, 1)
+    avgLatencyLabel.TextSize = 11
+    avgLatencyLabel.TextXAlignment = Enum.TextXAlignment.Left
+    avgLatencyLabel.Parent = impactFrame
 
     screenGui.Parent = game:GetService("CoreGui")
     mainFrame.Parent = screenGui
 
-    PhysicsSecurityMonitor.UI = {
+    -- 保存引用
+    ImpactTest.UI = {
         ScreenGui = screenGui,
-        MainFrame = mainFrame,
-        StartButton = startButton,
-        StopButton = stopButton,
-        SecurityButton = securityButton,
-        ContentLabel = contentLabel,
-        ScrollFrame = scrollFrame
+        StatusLabel = statusLabel,
+        ImpactLevelLabel = impactLevelLabel,
+        AffectedPlayersLabel = affectedPlayersLabel,
+        TeleportsLabel = teleportsLabel,
+        AvgLatencyLabel = avgLatencyLabel,
+        StartBtn = startBtn,
+        StopBtn = stopBtn,
+        ImpactFrame = impactFrame
     }
 
-    return mainFrame
+    return screenGui
 end
 
--- 更新显示内容
-function PhysicsSecurityMonitor.updateDisplay(text)
-    if PhysicsSecurityMonitor.UI and PhysicsSecurityMonitor.UI.ContentLabel then
-        PhysicsSecurityMonitor.UI.ContentLabel.Text = text
-        PhysicsSecurityMonitor.UI.ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, PhysicsSecurityMonitor.UI.ContentLabel.TextBounds.Y)
-        PhysicsSecurityMonitor.UI.ScrollFrame.CanvasPosition = Vector2.new(0, PhysicsSecurityMonitor.UI.ContentLabel.TextBounds.Y)
+-- 记录玩家初始位置和延迟数据
+function ImpactTest.recordPlayerPositions()
+    ImpactTest.PlayerData = {}
+    local players = game.Players:GetPlayers()
+    local localPlayer = game.Players.LocalPlayer
+    
+    for _, player in ipairs(players) do
+        if player ~= localPlayer and player.Character then
+            local rootPart = player.Character:FindFirstChild("HumanoidRootPart")
+            if rootPart then
+                ImpactTest.PlayerData[player.Name] = {
+                    startPos = rootPart.Position,
+                    positions = {rootPart.Position},
+                    timestamps = {tick()},
+                    lastPos = rootPart.Position,
+                    movementDistances = {},
+                    latencySamples = {}
+                }
+            end
+        end
     end
 end
 
--- 精确测量物理延迟
-function PhysicsSecurityMonitor.measurePhysicsLatency()
-    local runService = game:GetService("RunService")
+-- 增强的玩家监控功能
+function ImpactTest.monitorPlayers()
+    local players = game.Players:GetPlayers()
+    local localPlayer = game.Players.LocalPlayer
+    
+    for _, player in ipairs(players) do
+        if player ~= localPlayer and player.Character then
+            local rootPart = player.Character:FindFirstChild("HumanoidRootPart")
+            if rootPart and ImpactTest.PlayerData[player.Name] then
+                local currentPos = rootPart.Position
+                local playerData = ImpactTest.PlayerData[player.Name]
+                local currentTime = tick()
+                
+                table.insert(playerData.positions, currentPos)
+                table.insert(playerData.timestamps, currentTime)
+                
+                -- 计算移动距离和延迟
+                local distance = (currentPos - playerData.lastPos).Magnitude
+                table.insert(playerData.movementDistances, distance)
+                
+                -- 检查是否瞬移
+                if distance > 20 then -- 移动距离超过20，认为是瞬移
+                    playerData.teleports = (playerData.teleports or 0) + 1
+                    playerData.lastTeleportTime = currentTime
+                end
+                
+                -- 估算延迟（基于位置更新频率）
+                if #playerData.timestamps > 1 then
+                    local timeDiff = currentTime - playerData.timestamps[#playerData.timestamps - 1]
+                    local estimatedLatency = math.max(0, timeDiff - 0.033) * 1000 -- 减去正常帧时间
+                    table.insert(playerData.latencySamples, estimatedLatency)
+                end
+                
+                playerData.lastPos = currentPos
+            end
+        end
+    end
+end
+
+-- 增强的攻击模拟
+function ImpactTest.sendTestData()
+    local testData = {
+        testType = "impact_test",
+        timestamp = tick(),
+        intensity = ImpactTest.currentIntensity or 1
+    }
+    
+    -- 根据当前强度调整攻击频率
+    local attackCount = math.min(5, ImpactTest.currentIntensity or 1)
+    local remotesFound = 0
+    
+    local services = {game:GetService("ReplicatedStorage"), game:GetService("Workspace")}
+    
+    for _, service in ipairs(services) do
+        for _, obj in ipairs(service:GetDescendants()) do
+            if obj:IsA("RemoteEvent") and remotesFound < attackCount then
+                pcall(function()
+                    for i = 1, attackCount do
+                        obj:FireServer(testData)
+                    end
+                    remotesFound = remotesFound + 1
+                end)
+            end
+        end
+    end
+end
+
+-- 分析影响程度
+function ImpactTest.analyzeImpactLevel()
+    local totalPlayers = 0
+    local affectedPlayers = 0
+    local totalTeleports = 0
+    local totalLatency = 0
+    local latencySamples = 0
+    
+    for playerName, data in pairs(ImpactTest.PlayerData) do
+        totalPlayers = totalPlayers + 1
+        
+        -- 检查是否有瞬移
+        if data.teleports and data.teleports > 0 then
+            affectedPlayers = affectedPlayers + 1
+            totalTeleports = totalTeleports + data.teleports
+        end
+        
+        -- 计算平均延迟
+        if data.latencySamples and #data.latencySamples > 0 then
+            for _, latency in ipairs(data.latencySamples) do
+                totalLatency = totalLatency + latency
+                latencySamples = latencySamples + 1
+            end
+        end
+    end
+    
+    local avgLatency = latencySamples > 0 and totalLatency / latencySamples or 0
+    local affectedPercentage = totalPlayers > 0 and (affectedPlayers / totalPlayers) * 100 or 0
+    local avgTeleportsPerAffected = affectedPlayers > 0 and totalTeleports / affectedPlayers or 0
+    
+    -- 判断影响程度
+    local impactLevel = ImpactTest.ImpactLevels.NONE
+    
+    if affectedPlayers == 0 then
+        impactLevel = ImpactTest.ImpactLevels.NONE
+    elseif affectedPercentage < 30 and avgTeleportsPerAffected < 2 and avgLatency < 100 then
+        impactLevel = ImpactTest.ImpactLevels.LIGHT
+    elseif affectedPercentage < 60 and avgTeleportsPerAffected < 5 and avgLatency < 300 then
+        impactLevel = ImpactTest.ImpactLevels.MEDIUM
+    elseif affectedPercentage < 80 and avgTeleportsPerAffected < 10 and avgLatency < 500 then
+        impactLevel = ImpactTest.ImpactLevels.HEAVY
+    else
+        impactLevel = ImpactTest.ImpactLevels.SEVERE
+    end
+    
+    return {
+        level = impactLevel,
+        totalPlayers = totalPlayers,
+        affectedPlayers = affectedPlayers,
+        totalTeleports = totalTeleports,
+        avgLatency = avgLatency,
+        affectedPercentage = affectedPercentage
+    }
+end
+
+-- 开始测试
+function ImpactTest.startTest()
+    if ImpactTest.Testing then return end
+    
+    ImpactTest.Testing = true
+    ImpactTest.currentIntensity = 1
+    ImpactTest.recordPlayerPositions()
+    
+    ImpactTest.UI.StatusLabel.Text = "测试进行中...\n监控其他玩家移动和延迟\n持续15秒钟"
+    ImpactTest.UI.ImpactLevelLabel.Text = "等级: 测试中..."
+    
     local startTime = tick()
+    local testDuration = 15 -- 测试15秒
     
-    runService.Heartbeat:Wait()
-    local frameTime = (tick() - startTime) * 1000
+    -- 逐步增加攻击强度
+    ImpactTest.IntensityTimer = 0
     
-    return frameTime
-end
-
--- 测量FPS
-function PhysicsSecurityMonitor.measureFPS()
-    local frameTime = PhysicsSecurityMonitor.measurePhysicsLatency()
-    if frameTime > 0 then
-        return math.floor(1000 / frameTime)
-    end
-    return 0
-end
-
--- 获取性能统计
-function PhysicsSecurityMonitor.getPerformanceStats()
-    local stats = game:GetService("Stats")
-    local performanceStats = {}
-    
-    local memoryStats = stats:FindFirstChild("Memory")
-    if memoryStats then
-        performanceStats.memory = memoryStats:FindFirstChild("UsedMemory") and memoryStats.UsedMemory.Value or 0
-    end
-    
-    local networkStats = stats:FindFirstChild("Network")
-    if networkStats then
-        performanceStats.ping = networkStats:FindFirstChild("Ping") and networkStats.Ping.Value or 0
-        performanceStats.dataSent = networkStats:FindFirstChild("DataSent") and networkStats.DataSent.Value or 0
-        performanceStats.dataReceived = networkStats:FindFirstChild("DataReceived") and networkStats.DataReceived.Value or 0
-    end
-    
-    return performanceStats
-end
-
--- 计算统计函数
-function PhysicsSecurityMonitor.calculateMin(values)
-    if #values == 0 then return 0 end
-    local min = values[1]
-    for i = 2, #values do
-        if values[i] < min then
-            min = values[i]
-        end
-    end
-    return min
-end
-
-function PhysicsSecurityMonitor.calculateMax(values)
-    if #values == 0 then return 0 end
-    local max = values[1]
-    for i = 2, #values do
-        if values[i] > max then
-            max = values[i]
-        end
-    end
-    return max
-end
-
-function PhysicsSecurityMonitor.calculateAverage(values)
-    if #values == 0 then return 0 end
-    local sum = 0
-    for _, value in ipairs(values) do
-        sum = sum + value
-    end
-    return sum / #values
-end
-
--- 安全监测功能
-function PhysicsSecurityMonitor.detectAnomalies()
-    if not PhysicsSecurityMonitor.IsMonitoring then return end
-    
-    local currentMetrics = {
-        latency = PhysicsSecurityMonitor.calculateAverage(PhysicsSecurityMonitor.Metrics.physicsLatency),
-        fps = PhysicsSecurityMonitor.calculateAverage(PhysicsSecurityMonitor.Metrics.frameTimes),
-        variance = PhysicsSecurityMonitor.calculateMax(PhysicsSecurityMonitor.Metrics.physicsLatency) - 
-                  PhysicsSecurityMonitor.calculateMin(PhysicsSecurityMonitor.Metrics.physicsLatency)
-    }
-    
-    -- 建立正常基线
-    if not PhysicsSecurityMonitor.NormalBaseline and #PhysicsSecurityMonitor.Metrics.physicsLatency > 30 then
-        PhysicsSecurityMonitor.NormalBaseline = currentMetrics
-        PhysicsSecurityMonitor.updateDisplay("安全基线已建立\n开始异常监测...")
-    end
-    
-    -- 检测异常
-    if PhysicsSecurityMonitor.NormalBaseline then
-        local anomalies = {}
+    -- 监控循环
+    ImpactTest.MonitorConnection = game:GetService("RunService").Heartbeat:Connect(function(deltaTime)
+        if not ImpactTest.Testing then return end
         
-        -- 检测高延迟
-        if currentMetrics.latency > PhysicsSecurityMonitor.SecurityThresholds.highLatency then
-            table.insert(anomalies, "高物理延迟")
+        ImpactTest.monitorPlayers()
+        ImpactTest.sendTestData()
+        
+        -- 每3秒增加一次攻击强度
+        ImpactTest.IntensityTimer = ImpactTest.IntensityTimer + deltaTime
+        if ImpactTest.IntensityTimer >= 3 then
+            ImpactTest.currentIntensity = math.min(5, ImpactTest.currentIntensity + 1)
+            ImpactTest.IntensityTimer = 0
         end
         
-        -- 检测异常波动
-        if currentMetrics.variance > PhysicsSecurityMonitor.SecurityThresholds.highVariance then
-            table.insert(anomalies, "异常波动")
-        end
-        
-        -- 检测FPS骤降
-        if PhysicsSecurityMonitor.NormalBaseline.fps - currentMetrics.fps > PhysicsSecurityMonitor.SecurityThresholds.fpsDrop then
-            table.insert(anomalies, "FPS骤降")
-        end
-        
-        -- 处理检测结果
-        if #anomalies > 0 then
-            PhysicsSecurityMonitor.AnomalyCount = PhysicsSecurityMonitor.AnomalyCount + 1
-            
-            if PhysicsSecurityMonitor.AnomalyCount >= 3 then
-                PhysicsSecurityMonitor.triggerSecurityAlert(table.concat(anomalies, ", "), currentMetrics)
-            end
-        else
-            PhysicsSecurityMonitor.AnomalyCount = math.max(0, PhysicsSecurityMonitor.AnomalyCount - 1)
-        end
-    end
-end
-
--- 安全警报
-function PhysicsSecurityMonitor.triggerSecurityAlert(reason, metrics)
-    local alertTime = os.date("%H:%M:%S")
-    local alertId = tick()
-    
-    -- 记录警报
-    table.insert(PhysicsSecurityMonitor.SecurityAlerts, {
-        time = alertTime,
-        reason = reason,
-        metrics = metrics,
-        id = alertId
-    })
-    
-    -- 在界面上显示警告
-    local alertText = string.format(
-        "安全警报\n\n" ..
-        "检测到可能的服务器异常:\n%s\n\n" ..
-        "当前指标:\n" ..
-        "延迟: %.1fms | FPS: %d\n" ..
-        "波动: %.1fms\n\n" ..
-        "时间: %s\n" ..
-        "警报ID: %.0f\n\n" ..
-        "建议: 如持续出现请报告管理员",
-        reason, metrics.latency, metrics.fps, metrics.variance, alertTime, alertId
-    )
-    
-    -- 改变界面颜色以示警告
-    PhysicsSecurityMonitor.UI.MainFrame.BackgroundColor3 = Color3.new(0.3, 0.1, 0.1)
-    
-    -- 恢复颜色（8秒后）
-    delay(8, function()
-        if PhysicsSecurityMonitor.UI and PhysicsSecurityMonitor.UI.MainFrame then
-            PhysicsSecurityMonitor.UI.MainFrame.BackgroundColor3 = Color3.new(0.1, 0.1, 0.2)
+        local elapsed = tick() - startTime
+        if elapsed >= testDuration then
+            ImpactTest.stopTest()
         end
     end)
     
-    PhysicsSecurityMonitor.updateDisplay(alertText)
-    
-    -- 输出到控制台
-    warn(string.format("[安全监测] 警报 #%d: %s at %s", #PhysicsSecurityMonitor.SecurityAlerts, reason, alertTime))
-end
-
--- 切换安全监测
-function PhysicsSecurityMonitor.toggleSecurityMonitoring()
-    PhysicsSecurityMonitor.SecurityMonitoring = not PhysicsSecurityMonitor.SecurityMonitoring
-    
-    if PhysicsSecurityMonitor.SecurityMonitoring then
-        PhysicsSecurityMonitor.UI.SecurityButton.BackgroundColor3 = Color3.new(0.2, 0.6, 0.2)
-        PhysicsSecurityMonitor.UI.SecurityButton.Text = "安全监测: 开启"
-        PhysicsSecurityMonitor.updateDisplay("安全监测已启用\n将检测服务器异常行为...")
-    else
-        PhysicsSecurityMonitor.UI.SecurityButton.BackgroundColor3 = Color3.new(0.3, 0.3, 0.6)
-        PhysicsSecurityMonitor.UI.SecurityButton.Text = "安全监测: 关闭"
-        PhysicsSecurityMonitor.updateDisplay("安全监测已关闭")
-    end
-end
-
--- 显示安全日志
-function PhysicsSecurityMonitor.showSecurityLog()
-    if #PhysicsSecurityMonitor.SecurityAlerts == 0 then
-        return "暂无安全警报"
-    end
-    
-    local logText = "安全警报日志:\n\n"
-    for i, alert in ipairs(PhysicsSecurityMonitor.SecurityAlerts) do
-        logText = logText .. string.format("%d. [%s] %s\n", i, alert.time, alert.reason)
-    end
-    
-    return logText
-end
-
--- 开始监测
-function PhysicsSecurityMonitor.startMonitoring()
-    if PhysicsSecurityMonitor.IsMonitoring then return end
-
-    PhysicsSecurityMonitor.IsMonitoring = true
-    PhysicsSecurityMonitor.Metrics = {
-        physicsLatency = {},
-        frameTimes = {},
-        performanceStats = {}
-    }
-
-    PhysicsSecurityMonitor.UI.StartButton.BackgroundColor3 = Color3.new(0.6, 0.6, 0.2)
-    PhysicsSecurityMonitor.UI.StartButton.Text = "监测中..."
-
-    PhysicsSecurityMonitor.updateDisplay("开始监测物理延迟...\n\n正在收集基准数据...")
-
-    -- 主监测循环
-    PhysicsSecurityMonitor.MonitorConnection = game:GetService("RunService").Heartbeat:Connect(function()
-        if not PhysicsSecurityMonitor.IsMonitoring then return end
-
-        -- 测量物理延迟
-        local physicsTime = PhysicsSecurityMonitor.measurePhysicsLatency()
-        local fps = PhysicsSecurityMonitor.measureFPS()
-        local performanceStats = PhysicsSecurityMonitor.getPerformanceStats()
-
-        -- 记录数据
-        table.insert(PhysicsSecurityMonitor.Metrics.physicsLatency, physicsTime)
-        table.insert(PhysicsSecurityMonitor.Metrics.frameTimes, fps)
-        table.insert(PhysicsSecurityMonitor.Metrics.performanceStats, performanceStats)
+    -- 更新界面
+    ImpactTest.UpdateConnection = game:GetService("RunService").Heartbeat:Connect(function()
+        if not ImpactTest.Testing then return end
         
-        -- 保持数据量合理
-        if #PhysicsSecurityMonitor.Metrics.physicsLatency > 200 then
-            table.remove(PhysicsSecurityMonitor.Metrics.physicsLatency, 1)
-        end
-        if #PhysicsSecurityMonitor.Metrics.frameTimes > 200 then
-            table.remove(PhysicsSecurityMonitor.Metrics.frameTimes, 1)
-        end
-        if #PhysicsSecurityMonitor.Metrics.performanceStats > 200 then
-            table.remove(PhysicsSecurityMonitor.Metrics.performanceStats, 1)
-        end
-
-        -- 计算统计信息
-        local avgPhysics = PhysicsSecurityMonitor.calculateAverage(PhysicsSecurityMonitor.Metrics.physicsLatency)
-        local minPhysics = PhysicsSecurityMonitor.calculateMin(PhysicsSecurityMonitor.Metrics.physicsLatency)
-        local maxPhysics = PhysicsSecurityMonitor.calculateMax(PhysicsSecurityMonitor.Metrics.physicsLatency)
-        local avgFPS = PhysicsSecurityMonitor.calculateAverage(PhysicsSecurityMonitor.Metrics.frameTimes)
-        
-        local currentStats = performanceStats
-        local variance = maxPhysics - minPhysics
-
-        -- 更新显示
-        local displayText = string.format(
-            "物理延迟监测 - 实时数据\n\n" ..
-            "帧时间: %.1f ms\n" ..
-            "FPS: %d\n" ..
-            "波动范围: %.1f - %.1f ms\n" ..
-            "波动幅度: %.1f ms\n\n" ..
-            "性能统计:\n" ..
-            "内存使用: %.1f MB\n" ..
-            "网络延迟: %.0f ms\n" ..
-            "数据收发: ↑%.1fKB ↓%.1fKB\n\n" ..
-            "安全监测: %s\n" ..
-            "异常计数: %d/3\n\n",
-            avgPhysics, avgFPS, minPhysics, maxPhysics, variance,
-            (currentStats.memory or 0) / 1024 / 1024,
-            currentStats.ping or 0,
-            (currentStats.dataSent or 0) / 1024,
-            (currentStats.dataReceived or 0) / 1024,
-            PhysicsSecurityMonitor.SecurityMonitoring and "开启" or "关闭",
-            PhysicsSecurityMonitor.AnomalyCount
-        )
-        
-        -- 性能评级
-        if avgPhysics < 16.7 then
-            displayText = displayText .. "性能: 优秀 (60+ FPS)\n"
-        elseif avgPhysics < 33.3 then
-            displayText = displayText .. "性能: 良好 (30-60 FPS)\n"
-        elseif avgPhysics < 50 then
-            displayText = displayText .. "性能: 一般 (20-30 FPS)\n"
-        else
-            displayText = displayText .. "性能: 卡顿 (<20 FPS)\n"
-        end
-        
-        -- 安全状态
-        if PhysicsSecurityMonitor.SecurityMonitoring then
-            if PhysicsSecurityMonitor.AnomalyCount >= 2 then
-                displayText = displayText .. "安全状态: 可疑\n"
-            else
-                displayText = displayText .. "安全状态: 正常\n"
-            end
-        end
-        
-        displayText = displayText .. string.format("\n已监测 %d 帧", #PhysicsSecurityMonitor.Metrics.physicsLatency)
-
-        -- 每60帧执行一次安全检测
-        if PhysicsSecurityMonitor.SecurityMonitoring and #PhysicsSecurityMonitor.Metrics.physicsLatency % 60 == 0 then
-            PhysicsSecurityMonitor.detectAnomalies()
-        end
-
-        PhysicsSecurityMonitor.updateDisplay(displayText)
+        local elapsed = tick() - startTime
+        local remaining = math.max(0, testDuration - elapsed)
+        ImpactTest.UI.StatusLabel.Text = string.format("测试进行中...\n剩余时间: %.1f秒\n攻击强度: %d/5\n监控玩家: %d", 
+            remaining, ImpactTest.currentIntensity, #game.Players:GetPlayers() - 1)
     end)
 end
 
--- 停止监测
-function PhysicsSecurityMonitor.stopMonitoring()
-    PhysicsSecurityMonitor.IsMonitoring = false
-
-    if PhysicsSecurityMonitor.MonitorConnection then
-        PhysicsSecurityMonitor.MonitorConnection:Disconnect()
+-- 停止测试并显示详细结果
+function ImpactTest.stopTest()
+    if not ImpactTest.Testing then return end
+    
+    ImpactTest.Testing = false
+    
+    if ImpactTest.MonitorConnection then
+        ImpactTest.MonitorConnection:Disconnect()
     end
-
-    PhysicsSecurityMonitor.UI.StartButton.BackgroundColor3 = Color3.new(0.2, 0.6, 0.2)
-    PhysicsSecurityMonitor.UI.StartButton.Text = "开始监测"
-
-    -- 显示最终统计
-    if #PhysicsSecurityMonitor.Metrics.physicsLatency > 0 then
-        local avgPhysics = PhysicsSecurityMonitor.calculateAverage(PhysicsSecurityMonitor.Metrics.physicsLatency)
-        local avgFPS = PhysicsSecurityMonitor.calculateAverage(PhysicsSecurityMonitor.Metrics.frameTimes)
-        
-        local finalText = string.format(
-            "监测已停止\n\n最终统计:\n" ..
-            "平均帧时间: %.1f ms\n" ..
-            "平均FPS: %d\n" ..
-            "总监测帧数: %d\n\n",
-            avgPhysics, avgFPS, #PhysicsSecurityMonitor.Metrics.physicsLatency
-        )
-        
-        if #PhysicsSecurityMonitor.SecurityAlerts > 0 then
-            finalText = finalText .. string.format("安全警报: %d 次\n", #PhysicsSecurityMonitor.SecurityAlerts)
-            finalText = finalText .. PhysicsSecurityMonitor.showSecurityLog()
-        else
-            finalText = finalText .. "安全警报: 无\n\n点击开始监测重新启动"
-        end
-
-        PhysicsSecurityMonitor.updateDisplay(finalText)
-    else
-        PhysicsSecurityMonitor.updateDisplay("监测已停止\n\n点击开始监测重新启动")
+    
+    if ImpactTest.UpdateConnection then
+        ImpactTest.UpdateConnection:Disconnect()
     end
+    
+    -- 分析结果
+    local results = ImpactTest.analyzeImpactLevel()
+    
+    -- 更新界面显示
+    ImpactTest.UI.StatusLabel.Text = "测试完成!\n详细分析结果如下:"
+    
+    ImpactTest.UI.ImpactLevelLabel.Text = string.format("等级: %s", results.level.name)
+    ImpactTest.UI.ImpactLevelLabel.TextColor3 = results.level.color
+    
+    ImpactTest.UI.AffectedPlayersLabel.Text = string.format("受影响: %d/%d (%.1f%%)", 
+        results.affectedPlayers, results.totalPlayers, results.affectedPercentage)
+    
+    ImpactTest.UI.TeleportsLabel.Text = string.format("瞬移次数: %d", results.totalTeleports)
+    
+    ImpactTest.UI.AvgLatencyLabel.Text = string.format("平均延迟: %dms", math.floor(results.avgLatency))
+    
+    -- 显示详细描述
+    local description = ImpactTest.getImpactDescription(results)
+    ImpactTest.UI.StatusLabel.Text = string.format("测试完成!\n%s", description)
+end
+
+-- 获取影响程度描述
+function ImpactTest.getImpactDescription(results)
+    local descriptions = {
+        [ImpactTest.ImpactLevels.NONE.name] = "服务器表现正常，未检测到明显影响。",
+        [ImpactTest.ImpactLevels.LIGHT.name] = "轻微影响，少数玩家可能出现短暂卡顿。",
+        [ImpactTest.ImpactLevels.MEDIUM.name] = "中度影响，部分玩家体验受到影响。",
+        [ImpactTest.ImpactLevels.HEAVY.name] = "严重影响，多数玩家出现明显卡顿和瞬移。",
+        [ImpactTest.ImpactLevels.SEVERE.name] = "服务器性能严重下降，建议立即停止测试。"
+    }
+    
+    return string.format("%s\n受影响玩家: %d/%d | 平均延迟: %dms", 
+        descriptions[results.level.name] or "未知影响程度",
+        results.affectedPlayers, results.totalPlayers, math.floor(results.avgLatency))
+end
+
+-- 设置按钮功能
+function ImpactTest.setupButtons()
+    ImpactTest.UI.StartBtn.MouseButton1Click:Connect(function()
+        ImpactTest.startTest()
+    end)
+    
+    ImpactTest.UI.StopBtn.MouseButton1Click:Connect(function()
+        ImpactTest.stopTest()
+    end)
 end
 
 -- 初始化
-function PhysicsSecurityMonitor.init()
+function ImpactTest.init()
     if not game:IsLoaded() then
         game.Loaded:Wait()
     end
-
-    PhysicsSecurityMonitor.createUI()
-
-    -- 设置按钮事件
-    PhysicsSecurityMonitor.UI.StartButton.MouseButton1Click:Connect(function()
-        PhysicsSecurityMonitor.startMonitoring()
-    end)
-
-    PhysicsSecurityMonitor.UI.StopButton.MouseButton1Click:Connect(function()
-        PhysicsSecurityMonitor.stopMonitoring()
-    end)
-
-    PhysicsSecurityMonitor.UI.SecurityButton.MouseButton1Click:Connect(function()
-        PhysicsSecurityMonitor.toggleSecurityMonitoring()
-    end)
-
-    -- 添加快捷键
-    local userInputService = game:GetService("UserInputService")
-    if userInputService then
-        userInputService.InputBegan:Connect(function(input, gameProcessed)
-            if gameProcessed then return end
-
-            if input.KeyCode == Enum.KeyCode.F6 then
-                if not PhysicsSecurityMonitor.IsMonitoring then
-                    PhysicsSecurityMonitor.startMonitoring()
-                else
-                    PhysicsSecurityMonitor.stopMonitoring()
-                end
-            elseif input.KeyCode == Enum.KeyCode.F7 then
-                PhysicsSecurityMonitor.toggleSecurityMonitoring()
-            end
-        end)
-    end
-
-    PhysicsSecurityMonitor.updateDisplay("物理延迟与安全监测器已加载\n\n快捷键:\nF6 - 开始/停止监测\nF7 - 切换安全监测\n\n点击开始监测按钮或按F6开始")
+    
+    ImpactTest.createUI()
+    ImpactTest.setupButtons()
+    
+    ImpactTest.UI.StatusLabel.Text = "就绪\n点击开始测试按钮\n测试服务器影响程度"
 end
 
 -- 自动启动
 spawn(function()
-    wait(3)
-    PhysicsSecurityMonitor.init()
+    wait(1)
+    ImpactTest.init()
 end)
 
-return PhysicsSecurityMonitor
+return ImpactTest
