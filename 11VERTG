@@ -1,5 +1,5 @@
 -- 文件名：ServerLagAttack_Ultimate.lua
--- 终极服务器卡顿攻击工具 - 专门造成服务器端卡顿
+-- 11VERTG
 
 local LagAttack = {}
 LagAttack.IsRunning = false
@@ -86,7 +86,7 @@ function LagAttack.createUI()
     ultimateAttack.Size = UDim2.new(1, 0, 0, 35)
     ultimateAttack.Position = UDim2.new(0, 0, 0, 60)
     ultimateAttack.BackgroundColor3 = Color3.new(0.5, 0, 0.5)
-    ultimateAttack.Text = "💀 终极服务器毁灭模式"
+    ultimateAttack.Text = "终极服务器毁灭模式"
     ultimateAttack.TextColor3 = Color3.new(1, 1, 1)
     ultimateAttack.TextSize = 12
     ultimateAttack.Parent = modeFrame
@@ -290,7 +290,7 @@ function LagAttack.startAttack(mode)
         LIGHT = "轻度攻击",
         MEDIUM = "中度攻击", 
         HEAVY = "重度攻击",
-        ULTIMATE = "💀 终极毁灭模式"
+        ULTIMATE = "终极毁灭模式"
     }
     
     LagAttack.updateStatus(modeNames[mode] .. "进行中...\n服务器卡顿效果：其他玩家会瞬移\n攻击次数: 0")
