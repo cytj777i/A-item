@@ -36,7 +36,7 @@ function LagAttack.createUI()
     local titleLabel = Instance.new("TextLabel")
     titleLabel.Size = UDim2.new(1, 0, 1, 0)
     titleLabel.BackgroundTransparency = 1
-    titleLabel.Text = "XTTT服务器攻击器"
+    titleLabel.Text = "服务器攻击器"
     titleLabel.TextColor3 = Color3.new(1, 1, 1)
     titleLabel.TextSize = 14
     titleLabel.Font = Enum.Font.GothamBold
